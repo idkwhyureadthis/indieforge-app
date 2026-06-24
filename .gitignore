@@ -1,0 +1,16 @@
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ---- IDE (keep .idea ignored; it's local) ----
+.idea/
+.vscode/
+*.iml
+
+# ---- Local env / secrets ----
+.env
+.env.local
+.env.*.local
+*.local

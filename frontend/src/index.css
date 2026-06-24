@@ -1,0 +1,111 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+@import 'tailwindcss';
+
+/* ----------------------------------------------------------------------------
+   IndieForge — "forge and play" design tokens
+   Molten ember/amber on dark iron, with a violet "play" accent.
+---------------------------------------------------------------------------- */
+@theme {
+  --color-iron-950: #131315;
+  --color-iron-900: #1c1c1f;
+  --color-iron-850: #242427;
+  --color-iron-800: #2c2c30;
+  --color-iron-700: #3a3a40;
+  --color-iron-600: #4a4a51;
+  --color-iron-500: #5a5a62;
+
+  --color-ember-400: #ffb23e;
+  --color-ember-500: #ff8a3d;
+  --color-ember-600: #ff6a2c;
+  --color-ember-700: #e5521a;
+
+  --color-amber-glow: #ffc55c;
+
+  --color-violet-400: #a78bfa;
+  --color-violet-500: #8b5cf6;
+  --color-violet-600: #7c3aed;
+
+  --color-mist-50: #f5f5fa;
+  --color-mist-200: #d4d4de;
+  --color-mist-300: #aeaebd;
+  --color-mist-400: #8a8a99;
+  --color-mist-500: #6b6b78;
+
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Squarer corners across the app */
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.3125rem;
+  --radius-xl: 0.375rem;
+  --radius-2xl: 0.5rem;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    background-color: var(--color-iron-900);
+    color: var(--color-mist-50);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+  ::selection {
+    background: var(--color-ember-600);
+    color: #1a0a00;
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-[88rem] px-4 sm:px-6 lg:px-10;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-semibold transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-iron-900;
+  }
+  .btn-primary {
+    @apply bg-ember-600 text-iron-950 hover:bg-ember-500 focus-visible:ring-ember-500;
+  }
+  .btn-violet {
+    @apply bg-iron-700 text-mist-50 hover:bg-iron-600 focus-visible:ring-iron-500;
+  }
+  .btn-ghost {
+    @apply border border-iron-600 bg-iron-800/60 text-mist-200 hover:border-iron-500 hover:bg-iron-700/70 hover:text-mist-50 focus-visible:ring-iron-500;
+  }
+  .btn-lg {
+    @apply px-6 py-3.5 text-base;
+  }
+
+  /* Surfaces */
+  .card {
+    @apply rounded-md border border-iron-700 bg-iron-850;
+  }
+  .input {
+    @apply w-full rounded-md border border-iron-600 bg-iron-900/80 px-3.5 py-2.5 text-sm text-mist-50 placeholder:text-mist-500 transition-colors duration-200 focus:border-ember-500 focus:outline-none focus:ring-2 focus:ring-ember-500/25;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-mist-200;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded border border-iron-600 bg-iron-800 px-2.5 py-1 text-xs font-medium text-mist-300;
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,187 @@
+# Full local stack for IndieForge.
+#
+# Quick start:
+#   cp .env.example .env
+#   docker compose up --build
+#   Prometheus  → http://localhost:9090
+#   Grafana     → http://localhost:3000  (admin / GRAFANA_PASSWORD, default: admin)
+#
+# Seed test data (after the stack is up):
+#   docker compose run --rm seed
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-indieforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-indieforge}
+      POSTGRES_DB: ${POSTGRES_DB:-indieforge}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-indieforge} -d ${POSTGRES_DB:-indieforge}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    ports:
+      - "${CLAMAV_PORT:-3310}:3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      # First boot downloads virus definitions, which can take a few minutes.
+      test: ["CMD-SHELL", "clamdcheck.sh || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-indieforge}:${POSTGRES_PASSWORD:-indieforge}@postgres:5432/${POSTGRES_DB:-indieforge}?sslmode=disable
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:${FRONTEND_PORT:-5173},http://127.0.0.1:${FRONTEND_PORT:-5173}}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:${FRONTEND_PORT:-5173}}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      TRENDING_INTERVAL: ${TRENDING_INTERVAL:-15m}
+      # S3_ENDPOINT is the in-network address the API uses to talk to MinIO.
+      # S3_PUBLIC_ENDPOINT is what object URLs (and presigned download links)
+      # are built against, so it must be the host-mapped address the BROWSER
+      # can reach — not the service name, and without the bucket suffix.
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-indieforge}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_PUBLIC_ENDPOINT: http://localhost:${MINIO_API_PORT:-9000}
+      CLAMAV_ADDR: tcp://clamav:3310
+      # Required — left blank on purpose if not set in .env (see .env.example).
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+    ports:
+      - "${API_PORT:-8080}:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Vite inlines VITE_* vars into the JS bundle at BUILD time, so this
+        # must be an address the BROWSER can reach (host-mapped), not the
+        # in-network service name — same reasoning as S3_PUBLIC_ENDPOINT above.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:${API_PORT:-8080}/api}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+
+  # Seed test data. Run once after the stack is healthy:
+  #   docker compose run --rm seed
+  seed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.seed
+    profiles: ["seed"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-indieforge}:${POSTGRES_PASSWORD:-indieforge}@postgres:5432/${POSTGRES_DB:-indieforge}?sslmode=disable
+
+  # --- observability profile ---
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    restart: unless-stopped
+    command:
+      - -nginx.scrape-uri=http://frontend/nginx_status
+    depends_on:
+      - frontend
+    ports:
+      - "9113:9113"
+
+  # Optional: exposes the api container to the internet so YooKassa's real
+  # webhook can reach POST /api/webhooks/yookassa during manual payment
+  # testing. Requires NGROK_AUTHTOKEN (https://dashboard.ngrok.com).
+  # Start with: docker compose --profile tunnel up
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    depends_on:
+      - api
+    command: http api:8080
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+    ports:
+      - "4040:4040" # ngrok inspection UI — shows the public https URL
+
+volumes:
+  pg_data:
+  minio_data:
+  clamav_data:
+  prometheus_data:
+  grafana_data:

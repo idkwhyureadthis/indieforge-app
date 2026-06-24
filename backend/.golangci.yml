@@ -1,0 +1,48 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose # HTTP response bodies must be closed
+    - contextcheck # context.Context propagated correctly through call chains
+    - copyloopvar # accidental loop-variable copies
+    - errorlint # errors.Is/As used correctly, no plain == comparisons
+    - gocritic # broad correctness/style checks
+    - gosec # common security issues (used carefully — see excludes below)
+    - misspell
+    - noctx # http requests built without a context
+    - paralleltest # every t.Run() subtest must call t.Parallel() — see RULES.md
+    - revive
+    - sqlclosecheck # *sql.Rows/*sql.Stmt must be closed
+    - tparallel # parent test must call t.Parallel() if its subtests do
+    - unconvert
+    - unparam
+    - wastedassign
+
+  exclusions:
+    rules:
+      # Generated code is never hand-edited; don't lint it.
+      - path: internal/platform/db/sqlc/
+        linters:
+          - all
+      - path: docs/
+        linters:
+          - all
+      - linters: [revive]
+        text: "package-comments:"
+      # gosec G104 (unhandled error) is already covered by errcheck; avoid
+      # double-reporting the same finding under two linters.
+      - linters: [gosec]
+        text: "G104:"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

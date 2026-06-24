@@ -1,0 +1,37 @@
+# ---- Compiled binaries ----
+/server
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+indieforge
+indieforge-server
+
+# ---- Test / coverage ----
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# ---- Go workspace / vendor ----
+go.work
+go.work.sum
+/vendor/
+
+# ---- Env / secrets (YooKassa keys, DB DSN, S3 creds) ----
+.env
+.env.local
+.env.*.local
+
+# ---- Local data / uploads (dev disk storage before S3) ----
+/data/
+/tmp/
+/uploads/
+
+# ---- Editor / OS ----
+.DS_Store
+*.log
+
+# NOTE: sqlc-generated code (internal/db/sqlc) is committed on purpose.

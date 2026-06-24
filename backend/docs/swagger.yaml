@@ -1,0 +1,760 @@
+basePath: /api
+definitions:
+  indieforge_internal_dto.AuthResponse:
+    properties:
+      token:
+        type: string
+      user:
+        $ref: '#/definitions/indieforge_internal_dto.UserDTO'
+    type: object
+  indieforge_internal_dto.CreatePaymentRequest:
+    properties:
+      friendUsername:
+        type: string
+      gameId:
+        type: string
+      kind:
+        type: string
+    type: object
+  indieforge_internal_dto.CreateReportRequest:
+    properties:
+      details:
+        type: string
+      reason:
+        type: string
+      targetId:
+        type: string
+      targetType:
+        type: string
+    type: object
+  indieforge_internal_dto.DemoDayDTO:
+    properties:
+      active:
+        type: boolean
+      enabled:
+        type: boolean
+      endsAt:
+        type: string
+      startsAt:
+        type: string
+    type: object
+  indieforge_internal_dto.GameDTO:
+    properties:
+      browserBuildUrl:
+        type: string
+      canPlayFree:
+        type: boolean
+      coverImage:
+        type: string
+      createdAt:
+        type: string
+      demoDay:
+        $ref: '#/definitions/indieforge_internal_dto.DemoDayDTO'
+      description:
+        type: string
+      developerId:
+        type: string
+      developerName:
+        type: string
+      downloadFileName:
+        type: string
+      downloadPlatforms:
+        items:
+          type: string
+        type: array
+      downloadSizeMB:
+        type: integer
+      friendPackDiscount:
+        type: integer
+      genre:
+        type: string
+      hasBrowserBuild:
+        type: boolean
+      hasDownloadBuild:
+        type: boolean
+      id:
+        type: string
+      owned:
+        type: boolean
+      price:
+        type: integer
+      pricingModel:
+        type: string
+      screenshots:
+        items:
+          type: string
+        type: array
+      slug:
+        type: string
+      stats:
+        $ref: '#/definitions/indieforge_internal_dto.StatsDTO'
+      status:
+        type: string
+      subscribed:
+        type: boolean
+      subscription:
+        $ref: '#/definitions/indieforge_internal_dto.SubscriptionDTO'
+      supportsMultiplayer:
+        type: boolean
+      tagline:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      theme:
+        $ref: '#/definitions/indieforge_internal_dto.Theme'
+      title:
+        type: string
+    type: object
+  indieforge_internal_dto.HomeSections:
+    properties:
+      demoDay:
+        items:
+          $ref: '#/definitions/indieforge_internal_dto.GameDTO'
+        type: array
+      newest:
+        items:
+          $ref: '#/definitions/indieforge_internal_dto.GameDTO'
+        type: array
+      popular:
+        items:
+          $ref: '#/definitions/indieforge_internal_dto.GameDTO'
+        type: array
+      trending:
+        items:
+          $ref: '#/definitions/indieforge_internal_dto.GameDTO'
+        type: array
+    type: object
+  indieforge_internal_dto.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  indieforge_internal_dto.PaymentDTO:
+    properties:
+      amount:
+        type: integer
+      confirmationUrl:
+        type: string
+      createdAt:
+        type: string
+      friendUsername:
+        type: string
+      gameId:
+        type: string
+      id:
+        type: string
+      kind:
+        type: string
+      status:
+        type: string
+      userId:
+        type: string
+    type: object
+  indieforge_internal_dto.RegisterRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  indieforge_internal_dto.ReportDTO:
+    properties:
+      createdAt:
+        type: string
+      details:
+        type: string
+      handledBy:
+        type: string
+      id:
+        type: string
+      reason:
+        type: string
+      reporterId:
+        type: string
+      resolution:
+        type: string
+      resolvedAt:
+        type: string
+      status:
+        type: string
+      targetId:
+        type: string
+      targetType:
+        type: string
+    type: object
+  indieforge_internal_dto.ResolveRequest:
+    properties:
+      action:
+        type: string
+      note:
+        type: string
+    type: object
+  indieforge_internal_dto.Settings:
+    properties:
+      commissionPercent:
+        type: integer
+      popularEnabled:
+        type: boolean
+      trendingEnabled:
+        type: boolean
+    type: object
+  indieforge_internal_dto.StatsDTO:
+    properties:
+      owners:
+        type: integer
+      plays:
+        type: integer
+      subscribers:
+        type: integer
+    type: object
+  indieforge_internal_dto.SubscriptionDTO:
+    properties:
+      benefits:
+        items:
+          type: string
+        type: array
+      enabled:
+        type: boolean
+      period:
+        type: string
+      price:
+        type: integer
+    type: object
+  indieforge_internal_dto.Theme:
+    properties:
+      accent:
+        type: string
+      accent2:
+        type: string
+      background:
+        type: string
+      cardShape:
+        type: string
+      layout:
+        type: string
+    type: object
+  indieforge_internal_dto.UserDTO:
+    properties:
+      createdAt:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      isDeveloper:
+        type: boolean
+      role:
+        type: string
+      username:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Catalog of indie games — browser or download, free, paid or subscription.
+  title: IndieForge API
+  version: "1.0"
+paths:
+  /admin/settings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/indieforge_internal_dto.Settings'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get service settings (admin)
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/indieforge_internal_dto.Settings'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/indieforge_internal_dto.Settings'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update service settings (admin)
+      tags:
+      - admin
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/indieforge_internal_dto.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/indieforge_internal_dto.AuthResponse'
+      summary: Sign in
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Sign out
+      tags:
+      - auth
+  /auth/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/indieforge_internal_dto.UserDTO'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Current user
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/indieforge_internal_dto.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/indieforge_internal_dto.AuthResponse'
+      summary: Register a new account
+      tags:
+      - auth
+  /games:
+    get:
+      parameters:
+      - description: Search text
+        in: query
+        name: search
+        type: string
+      - description: Genre
+        in: query
+        name: genre
+        type: string
+      - description: free|paid|subscription|demo
+        in: query
+        name: pricing
+        type: string
+      - description: new|popular|price-asc|price-desc
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Browse games
+      tags:
+      - games
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Title
+        in: formData
+        name: title
+        required: true
+        type: string
+      - description: Tagline
+        in: formData
+        name: tagline
+        type: string
+      - description: Description
+        in: formData
+        name: description
+        type: string
+      - description: Genre
+        in: formData
+        name: genre
+        type: string
+      - description: free|paid
+        in: formData
+        name: pricingModel
+        type: string
+      - description: Price (RUB)
+        in: formData
+        name: price
+        type: integer
+      - description: Cover image
+        in: formData
+        name: cover
+        type: file
+      - description: Screenshots
+        in: formData
+        name: screenshots
+        type: file
+      - description: HTML5 build (zip)
+        in: formData
+        name: browserBuild
+        type: file
+      - description: Downloadable build
+        in: formData
+        name: downloadFile
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/indieforge_internal_dto.GameDTO'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Upload & publish a game
+      tags:
+      - games
+  /games/{id}/claim-free:
+    post:
+      parameters:
+      - description: Game id or slug
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/indieforge_internal_dto.GameDTO'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Add a free (or demo-active) game to the library
+      tags:
+      - commerce
+  /games/{id}/download:
+    get:
+      parameters:
+      - description: Game id or slug
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a presigned download URL (owners only)
+      tags:
+      - games
+  /games/{id}/perks:
+    get:
+      parameters:
+      - description: Game id or slug
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Subscriber chat link (subscribers/author only)
+      tags:
+      - commerce
+  /games/{key}:
+    get:
+      parameters:
+      - description: Game id or slug
+        in: path
+        name: key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/indieforge_internal_dto.GameDTO'
+            type: object
+      summary: Game detail
+      tags:
+      - games
+  /home:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/indieforge_internal_dto.HomeSections'
+      summary: Home sections (trending, popular, newest, demo day)
+      tags:
+      - games
+  /me/games:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Games created by the current user
+      tags:
+      - games
+  /me/library:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Owned + subscribed games
+      tags:
+      - commerce
+  /moderation/reports:
+    get:
+      parameters:
+      - description: open|resolved|dismissed
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List reports (moderator+)
+      tags:
+      - moderation
+  /moderation/reports/{id}:
+    get:
+      parameters:
+      - description: Report id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/indieforge_internal_dto.ReportDTO'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a report (moderator+)
+      tags:
+      - moderation
+  /moderation/reports/{id}/resolve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Report id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Action
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/indieforge_internal_dto.ResolveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/indieforge_internal_dto.ReportDTO'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Resolve a report (dismiss | hide-game | remove-game)
+      tags:
+      - moderation
+  /payments:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Payment request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/indieforge_internal_dto.CreatePaymentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/indieforge_internal_dto.PaymentDTO'
+      security:
+      - BearerAuth: []
+      summary: Start a YooKassa payment (purchase | friend-pack | subscription)
+      tags:
+      - commerce
+  /payments/{id}:
+    get:
+      parameters:
+      - description: Payment id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Payment status (poll after redirect)
+      tags:
+      - commerce
+  /payments/{id}/cancel:
+    post:
+      parameters:
+      - description: Payment id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Cancel a pending payment
+      tags:
+      - commerce
+  /reports:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Report
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/indieforge_internal_dto.CreateReportRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/indieforge_internal_dto.ReportDTO'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Report a game
+      tags:
+      - moderation
+  /webhooks/yookassa:
+    post:
+      consumes:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: YooKassa webhook (payment.succeeded)
+      tags:
+      - commerce
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
