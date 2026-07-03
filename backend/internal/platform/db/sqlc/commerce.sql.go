@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"time"
 )
 
 const createOwnership = `-- name: CreateOwnership :one
@@ -50,7 +51,7 @@ func (q *Queries) CreateOwnership(ctx context.Context, arg CreateOwnershipParams
 const createPayment = `-- name: CreatePayment :one
 INSERT INTO payments (id, yk_id, user_id, game_id, kind, amount, commission_percent, commission_amount, status, friend_username)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, yk_id, user_id, game_id, kind, amount, commission_percent, commission_amount, status, friend_username, created_at
+RETURNING id, yk_id, user_id, game_id, kind, amount, commission_percent, commission_amount, status, friend_username, created_at, plan_id, sub_id, payment_method_id
 `
 
 type CreatePaymentParams struct {
@@ -92,6 +93,9 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 		&i.Status,
 		&i.FriendUsername,
 		&i.CreatedAt,
+		&i.PlanID,
+		&i.SubID,
+		&i.PaymentMethodID,
 	)
 	return i, err
 }
@@ -99,7 +103,7 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 const createSubscription = `-- name: CreateSubscription :one
 INSERT INTO subscriptions (id, user_id, game_id, developer_id, price)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, game_id, developer_id, price, active, started_at
+RETURNING id, user_id, game_id, developer_id, price, active, started_at, expires_at, payment_method_id
 `
 
 type CreateSubscriptionParams struct {
@@ -127,12 +131,53 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 		&i.Price,
 		&i.Active,
 		&i.StartedAt,
+		&i.ExpiresAt,
+		&i.PaymentMethodID,
 	)
 	return i, err
 }
 
+const deactivateSubscription = `-- name: DeactivateSubscription :exec
+UPDATE subscriptions SET active = FALSE WHERE id = $1
+`
+
+func (q *Queries) DeactivateSubscription(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deactivateSubscription, id)
+	return err
+}
+
+const deleteOwnership = `-- name: DeleteOwnership :exec
+DELETE FROM ownerships WHERE user_id = $1 AND game_id = $2
+`
+
+type DeleteOwnershipParams struct {
+	UserID string `json:"user_id"`
+	GameID string `json:"game_id"`
+}
+
+func (q *Queries) DeleteOwnership(ctx context.Context, arg DeleteOwnershipParams) error {
+	_, err := q.db.Exec(ctx, deleteOwnership, arg.UserID, arg.GameID)
+	return err
+}
+
+const extendSubscription = `-- name: ExtendSubscription :exec
+UPDATE subscriptions
+SET expires_at = $2
+WHERE id = $1
+`
+
+type ExtendSubscriptionParams struct {
+	ID        string     `json:"id"`
+	ExpiresAt *time.Time `json:"expires_at"`
+}
+
+func (q *Queries) ExtendSubscription(ctx context.Context, arg ExtendSubscriptionParams) error {
+	_, err := q.db.Exec(ctx, extendSubscription, arg.ID, arg.ExpiresAt)
+	return err
+}
+
 const getActiveSubscription = `-- name: GetActiveSubscription :one
-SELECT id, user_id, game_id, developer_id, price, active, started_at FROM subscriptions WHERE user_id = $1 AND game_id = $2 AND active = TRUE
+SELECT id, user_id, game_id, developer_id, price, active, started_at, expires_at, payment_method_id FROM subscriptions WHERE user_id = $1 AND game_id = $2 AND active = TRUE
 `
 
 type GetActiveSubscriptionParams struct {
@@ -151,8 +196,21 @@ func (q *Queries) GetActiveSubscription(ctx context.Context, arg GetActiveSubscr
 		&i.Price,
 		&i.Active,
 		&i.StartedAt,
+		&i.ExpiresAt,
+		&i.PaymentMethodID,
 	)
 	return i, err
+}
+
+const getGameIDBySlugOrID = `-- name: GetGameIDBySlugOrID :one
+SELECT id FROM games WHERE id = $1 OR slug = $1
+`
+
+func (q *Queries) GetGameIDBySlugOrID(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, getGameIDBySlugOrID, id)
+	var id_2 string
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const getOwnership = `-- name: GetOwnership :one
@@ -180,7 +238,7 @@ func (q *Queries) GetOwnership(ctx context.Context, arg GetOwnershipParams) (Own
 }
 
 const getPaymentByID = `-- name: GetPaymentByID :one
-SELECT id, yk_id, user_id, game_id, kind, amount, commission_percent, commission_amount, status, friend_username, created_at FROM payments WHERE id = $1
+SELECT id, yk_id, user_id, game_id, kind, amount, commission_percent, commission_amount, status, friend_username, created_at, plan_id, sub_id, payment_method_id FROM payments WHERE id = $1
 `
 
 func (q *Queries) GetPaymentByID(ctx context.Context, id string) (Payment, error) {
@@ -198,12 +256,15 @@ func (q *Queries) GetPaymentByID(ctx context.Context, id string) (Payment, error
 		&i.Status,
 		&i.FriendUsername,
 		&i.CreatedAt,
+		&i.PlanID,
+		&i.SubID,
+		&i.PaymentMethodID,
 	)
 	return i, err
 }
 
 const getPaymentByYkID = `-- name: GetPaymentByYkID :one
-SELECT id, yk_id, user_id, game_id, kind, amount, commission_percent, commission_amount, status, friend_username, created_at FROM payments WHERE yk_id = $1
+SELECT id, yk_id, user_id, game_id, kind, amount, commission_percent, commission_amount, status, friend_username, created_at, plan_id, sub_id, payment_method_id FROM payments WHERE yk_id = $1
 `
 
 func (q *Queries) GetPaymentByYkID(ctx context.Context, ykID string) (Payment, error) {
@@ -221,8 +282,98 @@ func (q *Queries) GetPaymentByYkID(ctx context.Context, ykID string) (Payment, e
 		&i.Status,
 		&i.FriendUsername,
 		&i.CreatedAt,
+		&i.PlanID,
+		&i.SubID,
+		&i.PaymentMethodID,
 	)
 	return i, err
+}
+
+const getSubscriptionByID = `-- name: GetSubscriptionByID :one
+SELECT id, user_id, game_id, developer_id, price, active, started_at, expires_at, payment_method_id FROM subscriptions WHERE id = $1
+`
+
+func (q *Queries) GetSubscriptionByID(ctx context.Context, id string) (Subscription, error) {
+	row := q.db.QueryRow(ctx, getSubscriptionByID, id)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.GameID,
+		&i.DeveloperID,
+		&i.Price,
+		&i.Active,
+		&i.StartedAt,
+		&i.ExpiresAt,
+		&i.PaymentMethodID,
+	)
+	return i, err
+}
+
+const getUserSubscriptionStatus = `-- name: GetUserSubscriptionStatus :one
+SELECT s.active, s.expires_at
+FROM subscriptions s
+JOIN games g ON g.id = s.game_id
+WHERE s.user_id = $1
+  AND (g.id = $2 OR g.slug = $2)
+  AND s.active = TRUE
+LIMIT 1
+`
+
+type GetUserSubscriptionStatusParams struct {
+	UserID string `json:"user_id"`
+	ID     string `json:"id"`
+}
+
+type GetUserSubscriptionStatusRow struct {
+	Active    bool       `json:"active"`
+	ExpiresAt *time.Time `json:"expires_at"`
+}
+
+func (q *Queries) GetUserSubscriptionStatus(ctx context.Context, arg GetUserSubscriptionStatusParams) (GetUserSubscriptionStatusRow, error) {
+	row := q.db.QueryRow(ctx, getUserSubscriptionStatus, arg.UserID, arg.ID)
+	var i GetUserSubscriptionStatusRow
+	err := row.Scan(&i.Active, &i.ExpiresAt)
+	return i, err
+}
+
+const listExpiringSubscriptions = `-- name: ListExpiringSubscriptions :many
+SELECT id, user_id, game_id, developer_id, price, active, started_at, expires_at, payment_method_id FROM subscriptions
+WHERE active = TRUE
+  AND expires_at IS NOT NULL
+  AND payment_method_id != ''
+  AND expires_at <= $1
+ORDER BY expires_at
+`
+
+func (q *Queries) ListExpiringSubscriptions(ctx context.Context, expiresAt *time.Time) ([]Subscription, error) {
+	rows, err := q.db.Query(ctx, listExpiringSubscriptions, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Subscription
+	for rows.Next() {
+		var i Subscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.GameID,
+			&i.DeveloperID,
+			&i.Price,
+			&i.Active,
+			&i.StartedAt,
+			&i.ExpiresAt,
+			&i.PaymentMethodID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOwnershipsByUser = `-- name: ListOwnershipsByUser :many
@@ -258,7 +409,7 @@ func (q *Queries) ListOwnershipsByUser(ctx context.Context, userID string) ([]Ow
 }
 
 const listSubscriptionsByUser = `-- name: ListSubscriptionsByUser :many
-SELECT id, user_id, game_id, developer_id, price, active, started_at FROM subscriptions WHERE user_id = $1 AND active = TRUE ORDER BY started_at DESC
+SELECT id, user_id, game_id, developer_id, price, active, started_at, expires_at, payment_method_id FROM subscriptions WHERE user_id = $1 AND active = TRUE ORDER BY started_at DESC
 `
 
 func (q *Queries) ListSubscriptionsByUser(ctx context.Context, userID string) ([]Subscription, error) {
@@ -278,6 +429,8 @@ func (q *Queries) ListSubscriptionsByUser(ctx context.Context, userID string) ([
 			&i.Price,
 			&i.Active,
 			&i.StartedAt,
+			&i.ExpiresAt,
+			&i.PaymentMethodID,
 		); err != nil {
 			return nil, err
 		}
@@ -287,6 +440,68 @@ func (q *Queries) ListSubscriptionsByUser(ctx context.Context, userID string) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const listSubscriptionsWithExpiry = `-- name: ListSubscriptionsWithExpiry :many
+SELECT id, user_id, game_id, developer_id, price, active, started_at, expires_at, payment_method_id FROM subscriptions WHERE user_id = $1 ORDER BY started_at DESC
+`
+
+func (q *Queries) ListSubscriptionsWithExpiry(ctx context.Context, userID string) ([]Subscription, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionsWithExpiry, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Subscription
+	for rows.Next() {
+		var i Subscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.GameID,
+			&i.DeveloperID,
+			&i.Price,
+			&i.Active,
+			&i.StartedAt,
+			&i.ExpiresAt,
+			&i.PaymentMethodID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setPaymentMethodID = `-- name: SetPaymentMethodID :exec
+UPDATE payments SET payment_method_id = $2 WHERE id = $1
+`
+
+type SetPaymentMethodIDParams struct {
+	ID              string `json:"id"`
+	PaymentMethodID string `json:"payment_method_id"`
+}
+
+func (q *Queries) SetPaymentMethodID(ctx context.Context, arg SetPaymentMethodIDParams) error {
+	_, err := q.db.Exec(ctx, setPaymentMethodID, arg.ID, arg.PaymentMethodID)
+	return err
+}
+
+const setPaymentSubID = `-- name: SetPaymentSubID :exec
+UPDATE payments SET sub_id = $2 WHERE id = $1
+`
+
+type SetPaymentSubIDParams struct {
+	ID    string  `json:"id"`
+	SubID *string `json:"sub_id"`
+}
+
+func (q *Queries) SetPaymentSubID(ctx context.Context, arg SetPaymentSubIDParams) error {
+	_, err := q.db.Exec(ctx, setPaymentSubID, arg.ID, arg.SubID)
+	return err
 }
 
 const setPaymentYkID = `-- name: SetPaymentYkID :exec
@@ -300,6 +515,23 @@ type SetPaymentYkIDParams struct {
 
 func (q *Queries) SetPaymentYkID(ctx context.Context, arg SetPaymentYkIDParams) error {
 	_, err := q.db.Exec(ctx, setPaymentYkID, arg.ID, arg.YkID)
+	return err
+}
+
+const setSubscriptionRenewalInfo = `-- name: SetSubscriptionRenewalInfo :exec
+UPDATE subscriptions
+SET expires_at = $2, payment_method_id = $3
+WHERE id = $1
+`
+
+type SetSubscriptionRenewalInfoParams struct {
+	ID              string     `json:"id"`
+	ExpiresAt       *time.Time `json:"expires_at"`
+	PaymentMethodID string     `json:"payment_method_id"`
+}
+
+func (q *Queries) SetSubscriptionRenewalInfo(ctx context.Context, arg SetSubscriptionRenewalInfoParams) error {
+	_, err := q.db.Exec(ctx, setSubscriptionRenewalInfo, arg.ID, arg.ExpiresAt, arg.PaymentMethodID)
 	return err
 }
 

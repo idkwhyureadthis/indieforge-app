@@ -6,8 +6,8 @@
 *.dll
 *.so
 *.dylib
-indieforge
-indieforge-server
+/indieforge
+/indieforge-server
 
 # ---- Test / coverage ----
 *.test

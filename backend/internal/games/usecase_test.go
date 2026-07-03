@@ -38,6 +38,7 @@ func (stubRepo) HasOwnership(context.Context, string, string) (bool, error)     
 func (stubRepo) HasSubscription(context.Context, string, string) (bool, error)      { return false, nil }
 func (stubRepo) OwnedGameIDs(context.Context, string) (map[string]bool, error)      { return nil, nil }
 func (stubRepo) SubscribedGameIDs(context.Context, string) (map[string]bool, error) { return nil, nil }
+func (stubRepo) MarkDeveloper(context.Context, string) error                         { return nil }
 
 type stubStorage struct{ putCalled bool }
 

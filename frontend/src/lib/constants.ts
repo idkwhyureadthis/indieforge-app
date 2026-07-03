@@ -43,7 +43,11 @@ export const ACCENT_PRESETS: { name: string; accent: string; accent2: string; ba
   { name: 'Mono', accent: '#e5e5e5', accent2: '#9ca3af', background: '#0c0c0e' },
 ];
 
-export const RUB = (n: number) =>
-  n === 0
-    ? 'Free'
-    : new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n) + ' ₽';
+const _fmt = (n: number) =>
+  new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n) + ' ₽';
+
+// For prices: 0 means the game is free.
+export const RUB = (n: number) => (n === 0 ? 'Free' : _fmt(n));
+
+// For monetary totals (revenue, balance) — never shows "Free".
+export const RUBAmount = (n: number) => _fmt(n);

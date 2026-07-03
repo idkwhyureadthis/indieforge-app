@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Search, Library, LayoutDashboard, Plus, LogOut, Menu, X, Hammer, ShieldAlert, Sliders } from 'lucide-react';
+import { Search, Library, LayoutDashboard, Plus, LogOut, Menu, X, ShieldAlert, Sliders } from 'lucide-react';
 import { Logo, LogoMark } from './Logo';
 import { useAuth } from '@/context/AuthContext';
 
@@ -134,9 +134,9 @@ export function Layout() {
               <p className="text-xs text-mist-500">Forge and play — indie games, browser or download.</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs text-mist-500">
-            <Hammer className="h-3.5 w-3.5 text-ember-500" />
-            Phase 1 prototype · mocked backend · no real charges
+          <div className="flex items-center gap-4 text-xs text-mist-600">
+            <Link to="/docs" className="hover:text-mist-400 transition-colors">Developer docs</Link>
+            <span>© {new Date().getFullYear()} IndieForge</span>
           </div>
         </div>
       </footer>

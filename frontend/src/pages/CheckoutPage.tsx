@@ -111,8 +111,7 @@ export function CheckoutPage() {
 
           <div className="mt-5 flex items-start gap-2 rounded-lg border border-iron-700 bg-iron-900/60 p-3 text-xs text-mist-400">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-            Payments are processed by YooKassa. In this Phase 1 prototype the payment screen is
-            mocked — no card is charged.
+            Payments are processed securely by YooKassa.
           </div>
         </div>
 

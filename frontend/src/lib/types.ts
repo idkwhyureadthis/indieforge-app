@@ -33,7 +33,8 @@ export interface DemoDay {
 export interface GameTheme {
   accent: string; // hex — drives the cover gradient + page accents
   accent2: string; // hex — second gradient stop
-  background: string; // hex — game page background
+  background: string; // hex — center mat / panel background
+  backgroundImage?: string; // URL — wallpaper shown on sides behind the mat
   layout: 'classic' | 'immersive';
   cardShape: 'sharp' | 'rounded';
 }
@@ -94,6 +95,13 @@ export interface SubscriptionRecord {
   startedAt: string;
 }
 
+export interface UserSubscription {
+  id: string;
+  game: Game;
+  expiresAt: string | null; // ISO 8601 or null for legacy
+  active: boolean;
+}
+
 export interface AuthResponse {
   token: string;
   user: User;
@@ -134,6 +142,7 @@ export interface CreateGameInput {
   theme: GameTheme;
   // real files for multipart upload (browser sends, S3 stores)
   coverFile: File | null;
+  backgroundFile: File | null;
   screenshotFiles: File[];
   browserBuildFile: File | null;
   downloadFile: File | null;
@@ -177,4 +186,32 @@ export interface ListFilters {
 export interface ApiError {
   status: number;
   message: string;
+}
+
+export interface Payout {
+  ID: string;
+  DeveloperID: string;
+  Amount: number; // kopecks
+  Status: 'pending' | 'paid' | 'rejected';
+  Note: string;
+  CreatedAt: string;
+  UpdatedAt: string;
+}
+
+export interface PayoutWithDev extends Payout {
+  DeveloperUsername: string;
+}
+
+export interface PayoutBalance {
+  earned: number;    // kopecks — total earned across all completed payments
+  available: number; // kopecks — earned minus already requested
+  history: Payout[];
+}
+
+export interface APIKey {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revoked: boolean;
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Play, Download, Gift, Repeat, Library as LibraryIcon } from 'lucide-react';
-import type { Game } from '@/lib/types';
+import { Play, Download, Gift, Repeat, Library as LibraryIcon, X } from 'lucide-react';
+import type { Game, UserSubscription } from '@/lib/types';
 import { api } from '@/lib/api';
 import { CoverArt } from '@/components/CoverArt';
 import { EmptyState, PageLoader, SectionTitle } from '@/components/ui';
@@ -11,8 +11,9 @@ export function LibraryPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const [owned, setOwned] = useState<Game[]>([]);
-  const [subs, setSubs] = useState<Game[]>([]);
+  const [subs, setSubs] = useState<UserSubscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [canceling, setCanceling] = useState<string | null>(null);
 
   useEffect(() => {
     api
@@ -23,6 +24,25 @@ export function LibraryPage() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleCancel(sub: UserSubscription) {
+    if (!confirm(`Cancel your subscription to ${sub.game.title}?`)) return;
+    setCanceling(sub.id);
+    try {
+      await api.cancelSubscription(sub.id);
+      setSubs((prev) => prev.filter((s) => s.id !== sub.id));
+      toast('Subscription cancelled', 'success');
+    } catch {
+      toast('Could not cancel subscription', 'error');
+    } finally {
+      setCanceling(null);
+    }
+  }
+
+  function formatExpiry(iso: string | null) {
+    if (!iso) return null;
+    return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
 
   if (loading) return <PageLoader label="Loading your library…" />;
 
@@ -92,18 +112,33 @@ export function LibraryPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {subs.map((g) => (
-              <Link key={g.id} to={`/game/${g.slug}`} className="card flex items-center gap-3 p-3 hover:border-iron-500">
-                <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg">
-                  <CoverArt game={g} showTitle={false} />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="truncate font-600 text-mist-50">{g.title}</h3>
+            {subs.map((sub) => (
+              <div key={sub.id} className="card flex items-center gap-3 p-3">
+                <Link to={`/game/${sub.game.slug}`} className="h-16 w-24 shrink-0 overflow-hidden rounded-lg">
+                  <CoverArt game={sub.game} showTitle={false} />
+                </Link>
+                <div className="min-w-0 flex-1">
+                  <Link to={`/game/${sub.game.slug}`} className="block truncate font-600 text-mist-50 hover:text-ember-400">
+                    {sub.game.title}
+                  </Link>
                   <p className="flex items-center gap-1 text-xs text-ember-400">
-                    <Repeat className="h-3 w-3" /> Subscribed to {g.developerName}
+                    <Repeat className="h-3 w-3" /> Subscribed to {sub.game.developerName}
                   </p>
+                  {sub.expiresAt && (
+                    <p className="mt-0.5 text-xs text-mist-500">
+                      Renews {formatExpiry(sub.expiresAt)}
+                    </p>
+                  )}
                 </div>
-              </Link>
+                <button
+                  onClick={() => handleCancel(sub)}
+                  disabled={canceling === sub.id}
+                  title="Cancel subscription"
+                  className="shrink-0 rounded-lg p-1.5 text-mist-500 hover:bg-iron-700 hover:text-mist-200 disabled:opacity-40"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             ))}
           </div>
         )}

@@ -223,3 +223,7 @@ func (r *repo) SubscribedGameIDs(ctx context.Context, userID string) (map[string
 	}
 	return set, nil
 }
+
+func (r *repo) MarkDeveloper(ctx context.Context, userID string) error {
+	return r.q.MarkDeveloper(ctx, userID)
+}

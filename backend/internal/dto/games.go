@@ -4,11 +4,12 @@ package dto
 // between the create-game input and the public game DTO (pure data, no
 // internal-only fields), so games keeps a single definition here.
 type Theme struct {
-	Accent     string `json:"accent"`
-	Accent2    string `json:"accent2"`
-	Background string `json:"background"`
-	Layout     string `json:"layout"`
-	CardShape  string `json:"cardShape"`
+	Accent          string `json:"accent"`
+	Accent2         string `json:"accent2"`
+	Background      string `json:"background"`
+	BackgroundImage string `json:"backgroundImage,omitempty"`
+	Layout          string `json:"layout"`
+	CardShape       string `json:"cardShape"`
 }
 
 // SubscriptionDTO is the public view of a game's author-defined subscription

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pixel Paint</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0b0b0f;
+      color: #e2e8f0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      user-select: none;
+    }
+
+    h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.05em; color: #f97316; }
+
+    #status {
+      font-size: 0.75rem;
+      color: #64748b;
+      height: 1rem;
+      transition: color 0.3s;
+    }
+    #status.sub  { color: #34d399; }
+    #status.free { color: #94a3b8; }
+
+    #palette {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 400px;
+    }
+
+    .swatch {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.1s, border-color 0.15s;
+    }
+    .swatch:hover   { transform: scale(1.15); }
+    .swatch.active  { border-color: #fff; }
+    .swatch.locked  { opacity: 0.25; cursor: not-allowed; filter: grayscale(1); }
+
+    canvas {
+      border: 2px solid #1e293b;
+      border-radius: 8px;
+      cursor: crosshair;
+      touch-action: none;
+      image-rendering: pixelated;
+    }
+
+    #toolbar {
+      display: flex;
+      gap: 8px;
+    }
+
+    button {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    button:hover { background: #334155; color: #e2e8f0; }
+
+    #sub-banner {
+      font-size: 0.72rem;
+      color: #475569;
+      text-align: center;
+      max-width: 340px;
+      line-height: 1.5;
+    }
+    #sub-banner a { color: #f97316; text-decoration: none; }
+    #sub-banner a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<h1>🎨 Pixel Paint</h1>
+<div id="status">Checking subscription…</div>
+
+<div id="palette"></div>
+
+<canvas id="canvas" width="320" height="320"></canvas>
+
+<div id="toolbar">
+  <button id="btn-eraser">Eraser</button>
+  <button id="btn-clear">Clear</button>
+</div>
+
+<p id="sub-banner"></p>
+
+<script>
+// ─── Configuration ────────────────────────────────────────────────────────────
+// Replace with the actual slug of this game after uploading it to IndieForge.
+const GAME_SLUG = 'pixel-paint';
+
+// ─── Palette definition ───────────────────────────────────────────────────────
+// First 2 colors are free; the rest require a subscription.
+const COLORS = [
+  { hex: '#0f172a', label: 'Black' },
+  { hex: '#f8fafc', label: 'White' },
+  // subscriber-only below
+  { hex: '#ef4444', label: 'Red',    sub: true },
+  { hex: '#f97316', label: 'Orange', sub: true },
+  { hex: '#eab308', label: 'Yellow', sub: true },
+  { hex: '#22c55e', label: 'Green',  sub: true },
+  { hex: '#3b82f6', label: 'Blue',   sub: true },
+  { hex: '#8b5cf6', label: 'Purple', sub: true },
+  { hex: '#ec4899', label: 'Pink',   sub: true },
+  { hex: '#06b6d4', label: 'Cyan',   sub: true },
+];
+
+// ─── State ────────────────────────────────────────────────────────────────────
+const PIXEL_SIZE = 16;
+const GRID = 20; // 20×20 grid → 320px canvas
+
+let isSubscribed = false;
+let currentColor = COLORS[0].hex;
+let painting = false;
+
+// ─── Canvas setup ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+ctx.fillStyle = '#f8fafc';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+function paint(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width  / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  const x = Math.floor((clientX - rect.left) * scaleX / PIXEL_SIZE) * PIXEL_SIZE;
+  const y = Math.floor((clientY - rect.top)  * scaleY / PIXEL_SIZE) * PIXEL_SIZE;
+  ctx.fillStyle = currentColor;
+  ctx.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE);
+}
+
+canvas.addEventListener('mousedown',  (e) => { painting = true; paint(e); });
+canvas.addEventListener('mousemove',  (e) => { if (painting) paint(e); });
+canvas.addEventListener('mouseup',    ()  => { painting = false; });
+canvas.addEventListener('mouseleave', ()  => { painting = false; });
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); painting = true; paint(e); }, { passive: false });
+canvas.addEventListener('touchmove',  (e) => { e.preventDefault(); if (painting) paint(e); }, { passive: false });
+canvas.addEventListener('touchend',   ()  => { painting = false; });
+
+// ─── Toolbar ─────────────────────────────────────────────────────────────────
+document.getElementById('btn-eraser').addEventListener('click', () => {
+  currentColor = '#f8fafc';
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+});
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+});
+
+// ─── Palette render ───────────────────────────────────────────────────────────
+function renderPalette() {
+  const el = document.getElementById('palette');
+  el.innerHTML = '';
+  COLORS.forEach(({ hex, label, sub }) => {
+    const locked = sub && !isSubscribed;
+    const div = document.createElement('div');
+    div.className = 'swatch' + (locked ? ' locked' : '') + (hex === currentColor ? ' active' : '');
+    div.style.background = hex;
+    div.title = locked ? `${label} — subscriber only` : label;
+    if (!locked) {
+      div.addEventListener('click', () => {
+        currentColor = hex;
+        document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+        div.classList.add('active');
+      });
+    }
+    el.appendChild(div);
+  });
+}
+
+// ─── Subscription check ───────────────────────────────────────────────────────
+async function checkSubscription() {
+  const statusEl = document.getElementById('status');
+  const bannerEl = document.getElementById('sub-banner');
+
+  // Detect the IndieForge API base URL.
+  // When served as a browser build inside IndieForge the page is on the same
+  // origin as the frontend; the API lives at /api relative to that origin.
+  // When opened locally (file://) fall back to localhost for development.
+  let apiBase;
+  if (window.location.protocol === 'file:') {
+    apiBase = 'http://localhost:8080/api';
+  } else {
+    // IndieForge frontend proxy: /api → backend
+    apiBase = window.location.origin + '/api';
+  }
+
+  const token = localStorage.getItem('indieforge_token');
+  if (!token) {
+    statusEl.textContent = 'Not logged in — log into IndieForge to check subscription';
+    statusEl.className = 'free';
+    renderPalette();
+    bannerEl.innerHTML = 'Log in to IndieForge to unlock subscriber colours.';
+    return;
+  }
+
+  try {
+    const res = await fetch(`${apiBase}/me/subscription-status?gameId=${GAME_SLUG}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    isSubscribed = data.subscribed === true;
+
+    if (isSubscribed) {
+      const expiry = data.expiresAt
+        ? ` · renews ${new Date(data.expiresAt).toLocaleDateString()}`
+        : '';
+      statusEl.textContent = `✓ Subscriber${expiry} — all colours unlocked!`;
+      statusEl.className = 'sub';
+      bannerEl.innerHTML = '';
+    } else {
+      statusEl.textContent = 'Free user — 2 colours available';
+      statusEl.className = 'free';
+      bannerEl.innerHTML =
+        'Subscribe on the <a href="javascript:history.back()">game page</a> to unlock 8 more colours.';
+    }
+  } catch (err) {
+    statusEl.textContent = 'Could not reach IndieForge API';
+    statusEl.className = '';
+    bannerEl.innerHTML = `Error: ${err.message}`;
+  }
+
+  renderPalette();
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+renderPalette(); // show locked palette immediately while checking
+checkSubscription();
+</script>
+</body>
+</html>

@@ -34,10 +34,6 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
     }
   };
 
-  const fillDemoDev = () => {
-    setEmail('dev@indieforge.gg');
-    setPassword('demo');
-  };
 
   return (
     <div className="container-page flex min-h-[calc(100vh-4rem)] items-center justify-center py-12">
@@ -104,15 +100,6 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
             {busy ? <Spinner /> : isLogin ? 'Sign in' : 'Create account'}
           </button>
 
-          {isLogin && (
-            <button
-              type="button"
-              onClick={fillDemoDev}
-              className="w-full cursor-pointer text-center text-xs text-mist-500 transition-colors hover:text-ember-400"
-            >
-              Use the demo developer account (dev@indieforge.gg / demo)
-            </button>
-          )}
         </form>
 
         <p className="mt-5 text-center text-sm text-mist-400">

@@ -10,9 +10,14 @@ import type {
   ListFilters,
   Payment,
   PaymentKind,
+  Payout,
+  APIKey,
+  PayoutBalance,
+  PayoutWithDev,
   Report,
   ServiceSettings,
   User,
+  UserSubscription,
 } from './types';
 
 export { ApiError };
@@ -64,6 +69,7 @@ function buildGameForm(input: CreateGameInput): FormData {
   if (input.demoDay.endsAt) f.set('demoEndsAt', input.demoDay.endsAt);
   f.set('theme', JSON.stringify(input.theme));
   if (input.coverFile) f.set('cover', input.coverFile);
+  if (input.backgroundFile) f.set('backgroundImage', input.backgroundFile);
   input.screenshotFiles.forEach((s) => f.append('screenshots', s));
   if (input.browserBuildFile) f.set('browserBuild', input.browserBuildFile);
   if (input.downloadFile) f.set('downloadFile', input.downloadFile);
@@ -89,7 +95,10 @@ export const api = {
   downloadUrl: (gameId: string) => http.get<{ url: string }>(`/games/${gameId}/download`).then((r) => r.url),
 
   // ---- commerce ----
-  library: () => http.get<{ owned: Game[]; subscribed: Game[] }>('/me/library'),
+  library: () => http.get<{ owned: Game[]; subscribed: UserSubscription[] }>('/me/library'),
+  cancelSubscription: (id: string) => http.del<void>(`/subscriptions/${id}`),
+  issueLaunchToken: (gameId: string) => http.post<{ token: string }>('/me/launch-tokens', { gameId }),
+  subscriptionStatus: (gameId: string) => http.get<{ subscribed: boolean; expiresAt: string | null }>(`/me/subscription-status?gameId=${gameId}`),
   claimFree: (gameId: string) => http.post<{ game: Game }>(`/games/${gameId}/claim-free`).then((r) => r.game),
   createPayment: (input: { gameId: string; kind: PaymentKind; friendUsername?: string }) =>
     http.post<Payment>('/payments', input),
@@ -106,8 +115,21 @@ export const api = {
   resolveReport: (id: string, action: string, note: string) =>
     http.post<{ report: Report }>(`/moderation/reports/${id}/resolve`, { action, note }).then((r) => r.report),
 
+  // ---- payouts ----
+  getPayoutBalance: () => http.get<PayoutBalance>('/payouts/balance'),
+  requestPayout: (amount: number) => http.post<Payout>('/payouts', { amount }),
+  adminListPayouts: () => http.get<PayoutWithDev[]>('/admin/payouts'),
+  adminUpdatePayout: (id: string, status: 'paid' | 'rejected', note: string) =>
+    http.patch<Payout>(`/admin/payouts/${id}`, { status, note }),
+
   // ---- admin settings ----
   getSettings: () => http.get<{ settings: ServiceSettings }>('/admin/settings').then((r) => r.settings),
   updateSettings: (s: ServiceSettings) =>
     http.put<{ settings: ServiceSettings }>('/admin/settings', s).then((r) => r.settings),
+
+  // ---- developer API keys ----
+  listAPIKeys: () => http.get<{ keys: APIKey[] }>('/developer/api-keys').then((r) => r.keys),
+  createAPIKey: (name: string) =>
+    http.post<{ id: string; name: string; key: string; createdAt: string }>('/developer/api-keys', { name }),
+  revokeAPIKey: (id: string) => http.del<void>(`/developer/api-keys/${id}`),
 };

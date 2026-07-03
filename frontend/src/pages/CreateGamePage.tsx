@@ -40,6 +40,7 @@ const initial: CreateGameInput = {
   demoDay: { enabled: false, startsAt: null, endsAt: null },
   theme: initialTheme,
   coverFile: null,
+  backgroundFile: null,
   screenshotFiles: [],
   browserBuildFile: null,
   downloadFile: null,
@@ -139,6 +140,19 @@ function validateStep(step: number, f: CreateGameInput): string | null {
     return 'Add at least one build: browser or downloadable';
   if (step === 1 && f.hasBrowserBuild && !f.browserBuildUrl && !f.browserBuildFile)
     return 'Provide a browser build URL or upload an HTML build';
+  if (step === 1 && f.hasBrowserBuild && f.browserBuildUrl) {
+    try {
+      const u = new URL(f.browserBuildUrl);
+      const host = u.hostname.toLowerCase();
+      const ownHost = window.location.hostname.toLowerCase();
+      if (host === 'localhost' || host === '127.0.0.1' || host === ownHost)
+        return 'Hosted build URL cannot point to IndieForge itself or localhost';
+      if (u.protocol !== 'https:' && !(host === 'localhost' || host === '127.0.0.1'))
+        return 'Hosted build URL must use HTTPS';
+    } catch {
+      return 'Hosted build URL is not a valid URL';
+    }
+  }
   if (step === 1 && f.hasDownloadBuild && !f.downloadFile)
     return 'Upload a downloadable build file';
   if (step === 2 && f.pricingModel === 'paid' && f.price <= 0)
@@ -500,7 +514,12 @@ function fromLocalInput(v: string): string | null {
 // Step 4 — Page style (itch.io-like customisation)
 // ---------------------------------------------------------------------------
 function StyleStep({ form, update }: { form: CreateGameInput; update: (p: Partial<CreateGameInput>) => void }) {
+  const bgRef = useRef<HTMLInputElement>(null);
   const setTheme = (patch: Partial<GameTheme>) => update({ theme: { ...form.theme, ...patch } });
+  const bgPreview = useMemo(
+    () => (form.backgroundFile ? URL.createObjectURL(form.backgroundFile) : null),
+    [form.backgroundFile],
+  );
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
@@ -534,10 +553,35 @@ function StyleStep({ form, update }: { form: CreateGameInput; update: (p: Partia
         <Field label="Accent 2">
           <ColorInput value={form.theme.accent2} onChange={(v) => setTheme({ accent2: v })} />
         </Field>
-        <Field label="Page background">
+        <Field label="Mat color">
           <ColorInput value={form.theme.background} onChange={(v) => setTheme({ background: v })} />
         </Field>
       </div>
+
+      <Field label="Wallpaper" hint="Shown behind your page on the sides. Leave blank to use your cover.">
+        <input ref={bgRef} type="file" accept="image/*" hidden onChange={(e) => update({ backgroundFile: e.target.files?.[0] ?? null })} />
+        <div className="flex items-center gap-4">
+          {bgPreview ? (
+            <div className="h-16 w-28 overflow-hidden rounded-lg border border-iron-700">
+              <img src={bgPreview} alt="Wallpaper preview" className="h-full w-full object-cover" />
+            </div>
+          ) : (
+            <div className="flex h-16 w-28 items-center justify-center rounded-lg border border-dashed border-iron-600 text-xs text-mist-500">
+              No wallpaper
+            </div>
+          )}
+          <div className="flex flex-col gap-2">
+            <button type="button" onClick={() => bgRef.current?.click()} className="btn btn-ghost">
+              <ImageIcon className="h-4 w-4" /> {form.backgroundFile ? 'Replace wallpaper' : 'Upload wallpaper'}
+            </button>
+            {form.backgroundFile && (
+              <button type="button" onClick={() => update({ backgroundFile: null })} className="text-xs text-mist-500 hover:text-rose-400">
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+      </Field>
 
       <Field label="Layout">
         <div className="grid grid-cols-2 gap-3">

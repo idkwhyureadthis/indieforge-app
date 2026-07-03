@@ -2,8 +2,12 @@ package commerce
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 
 	"indieforge/internal/dto"
 	"indieforge/internal/games"
@@ -19,14 +23,29 @@ type Repo interface {
 	CreateOwnership(ctx context.Context, id, userID, gameID, otype string, price int, giftedBy string) error
 	HasOwnership(ctx context.Context, userID, gameID string) (bool, error)
 	OwnedGameIDs(ctx context.Context, userID string) ([]string, error)
-	CreateSubscription(ctx context.Context, id, userID, gameID, developerID string, price int) error
+	CreateSubscription(ctx context.Context, id, userID, gameID, developerID string, price int) (Subscription, error)
 	HasActiveSubscription(ctx context.Context, userID, gameID string) (bool, error)
 	SubscribedGameIDs(ctx context.Context, userID string) ([]string, error)
+	ListSubscriptions(ctx context.Context, userID string) ([]Subscription, error)
+	GetSubscriptionByID(ctx context.Context, id string) (Subscription, error)
+	GetUserSubscriptionStatus(ctx context.Context, userID, gameKey string) (VerifyResult, error)
+	GetGameIDByKey(ctx context.Context, key string) (string, error)
+	CreateLaunchToken(ctx context.Context, tokenHash, userID, gameID string) error
+	SetSubscriptionRenewalInfo(ctx context.Context, subID string, expiresAt time.Time, paymentMethodID string) error
+	ExtendSubscription(ctx context.Context, subID string, expiresAt time.Time) error
+	DeactivateSubscription(ctx context.Context, subID string) error
+	ListExpiringSubscriptions(ctx context.Context, before time.Time) ([]Subscription, error)
 	CreatePayment(ctx context.Context, p Payment) (Payment, error)
 	GetPaymentByID(ctx context.Context, id string) (Payment, error)
 	GetPaymentByYkID(ctx context.Context, ykID string) (Payment, error)
 	SetPaymentYkID(ctx context.Context, id, ykID string) error
+	SetPaymentSubID(ctx context.Context, paymentID, subID string) error
+	SetPaymentMethodID(ctx context.Context, paymentID, methodID string) error
 	UpdatePaymentStatus(ctx context.Context, id, status string) error
+	DeleteOwnership(ctx context.Context, userID, gameID string) error
+	GetSubscriptionPlan(ctx context.Context, planID string) (SubscriptionPlan, error)
+	ListPlanGameIDs(ctx context.Context, planID string) ([]string, error)
+	SetPaymentPlanID(ctx context.Context, paymentID, planID string) error
 	UserByUsername(ctx context.Context, username string) (middleware.User, error)
 	UsernameByID(ctx context.Context, id string) (string, error)
 }
@@ -42,7 +61,9 @@ type GamesReader interface {
 type Payments interface {
 	Configured() bool
 	CreatePayment(ctx context.Context, p yookassa.CreateParams) (yookassa.Payment, error)
+	CreateRecurrentPayment(ctx context.Context, p yookassa.RecurrentParams) (yookassa.Payment, error)
 	GetPayment(ctx context.Context, id string) (yookassa.Payment, error)
+	RefundPayment(ctx context.Context, ykPaymentID string, amountRub int) error
 }
 
 // Settings exposes the current commission percent.
@@ -74,12 +95,8 @@ func (uc *UseCase) game(ctx context.Context, key string) (games.Game, error) {
 }
 
 // Library returns the user's owned and subscribed games.
-func (uc *UseCase) Library(ctx context.Context, userID string) ([]dto.GameDTO, []dto.GameDTO, error) {
+func (uc *UseCase) Library(ctx context.Context, userID string) ([]dto.GameDTO, []dto.UserSubscriptionDTO, error) {
 	ownedIDs, err := uc.repo.OwnedGameIDs(ctx, userID)
-	if err != nil {
-		return nil, nil, err
-	}
-	subIDs, err := uc.repo.SubscribedGameIDs(ctx, userID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -87,9 +104,34 @@ func (uc *UseCase) Library(ctx context.Context, userID string) ([]dto.GameDTO, [
 	if err != nil {
 		return nil, nil, err
 	}
-	subscribed, err := uc.serializeIDs(ctx, subIDs, userID)
+	subs, err := uc.repo.ListSubscriptions(ctx, userID)
 	if err != nil {
 		return nil, nil, err
+	}
+	subscribed := make([]dto.UserSubscriptionDTO, 0, len(subs))
+	for _, sub := range subs {
+		g, err := uc.games.GameByKey(ctx, sub.GameID)
+		if errors.Is(err, games.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		gameDTO, err := uc.games.Serialize(ctx, g, userID)
+		if err != nil {
+			return nil, nil, err
+		}
+		var expiresAt *string
+		if sub.ExpiresAt != nil {
+			s := sub.ExpiresAt.Format(time.RFC3339)
+			expiresAt = &s
+		}
+		subscribed = append(subscribed, dto.UserSubscriptionDTO{
+			ID:        sub.ID,
+			Game:      gameDTO,
+			ExpiresAt: expiresAt,
+			Active:    sub.Active,
+		})
 	}
 	return owned, subscribed, nil
 }
@@ -137,7 +179,13 @@ func (uc *UseCase) ClaimFree(ctx context.Context, user middleware.User, gameKey 
 }
 
 // CreatePayment validates the purchase and starts a YooKassa payment.
-func (uc *UseCase) CreatePayment(ctx context.Context, user middleware.User, gameKey, kind, friendUsername string) (Payment, string, error) {
+// planID is non-empty when subscribing to a developer subscription plan.
+func (uc *UseCase) CreatePayment(ctx context.Context, user middleware.User, gameKey, kind, friendUsername, planID string) (Payment, string, error) {
+	// Plan subscription is handled separately.
+	if kind == "subscription" && planID != "" {
+		return uc.createPlanPayment(ctx, user, planID)
+	}
+
 	g, err := uc.game(ctx, gameKey)
 	if err != nil {
 		return Payment{}, "", err
@@ -226,10 +274,11 @@ func (uc *UseCase) CreatePayment(ctx context.Context, user middleware.User, game
 	}
 
 	ykp, err := uc.yk.CreatePayment(ctx, yookassa.CreateParams{
-		Amount:      amount,
-		Description: fmt.Sprintf("IndieForge: %s — %s", g.Title, kind),
-		ReturnURL:   uc.appBaseURL + "/checkout/return?paymentId=" + payID,
-		Metadata:    map[string]string{"paymentId": payID},
+		Amount:            amount,
+		Description:       fmt.Sprintf("IndieForge: %s — %s", g.Title, kind),
+		ReturnURL:         uc.appBaseURL + "/checkout/return?paymentId=" + payID,
+		Metadata:          map[string]string{"paymentId": payID},
+		SavePaymentMethod: kind == "subscription",
 	})
 	if err != nil {
 		_ = uc.repo.UpdatePaymentStatus(ctx, payID, "canceled")
@@ -283,9 +332,7 @@ func (uc *UseCase) HandleWebhook(ctx context.Context, body []byte) error {
 	if err != nil {
 		return apperr.BadRequest("Invalid webhook body")
 	}
-	if e.Event != "payment.succeeded" {
-		return nil
-	}
+
 	pay, err := uc.repo.GetPaymentByYkID(ctx, e.Object.ID)
 	if errors.Is(err, ErrNotFound) {
 		return nil // unknown payment — ignore
@@ -293,26 +340,90 @@ func (uc *UseCase) HandleWebhook(ctx context.Context, body []byte) error {
 	if err != nil {
 		return err
 	}
-	if pay.Status == "succeeded" {
-		return nil // idempotent
-	}
 
-	// Re-verify with YooKassa before granting.
-	if uc.yk.Configured() {
-		remote, err := uc.yk.GetPayment(ctx, e.Object.ID)
+	switch e.Event {
+	case "payment.canceled":
+		// If this is a renewal payment, deactivate the subscription.
+		if pay.SubID != "" {
+			_ = uc.repo.DeactivateSubscription(ctx, pay.SubID)
+		}
+		return uc.repo.UpdatePaymentStatus(ctx, pay.ID, "canceled")
+
+	case "payment.succeeded":
+		if pay.Status == "succeeded" {
+			return nil // idempotent
+		}
+
+		// Re-verify with YooKassa before granting.
+		if uc.yk.Configured() {
+			remote, err := uc.yk.GetPayment(ctx, e.Object.ID)
+			if err != nil {
+				return err
+			}
+			if remote.Status != "succeeded" {
+				return nil
+			}
+		}
+
+		// Save the payment method ID for future renewals.
+		if pmID := e.Object.PaymentMethod.ID; pmID != "" {
+			_ = uc.repo.SetPaymentMethodID(ctx, pay.ID, pmID)
+			pay.PaymentMethodID = pmID
+		}
+
+		if pay.SubID != "" {
+			// This is a renewal payment — extend the subscription.
+			if err := uc.extendSub(ctx, pay); err != nil {
+				return err
+			}
+		} else if pay.PlanID != "" {
+			if err := uc.grantPlan(ctx, pay); err != nil {
+				return err
+			}
+		} else {
+			if err := uc.grant(ctx, pay); err != nil {
+				return err
+			}
+		}
+		metrics.PurchasesTotal.WithLabelValues(pay.Kind).Inc()
+		return uc.repo.UpdatePaymentStatus(ctx, pay.ID, "succeeded")
+	}
+	return nil
+}
+
+// extendSub extends an existing subscription by one period after a renewal payment.
+func (uc *UseCase) extendSub(ctx context.Context, pay Payment) error {
+	sub, err := uc.repo.GetSubscriptionByID(ctx, pay.SubID)
+	if err != nil {
+		return err
+	}
+	newExpiry := nextExpiry(sub.ExpiresAt)
+	if pay.PaymentMethodID != "" {
+		return uc.repo.SetSubscriptionRenewalInfo(ctx, sub.ID, newExpiry, pay.PaymentMethodID)
+	}
+	return uc.repo.ExtendSubscription(ctx, sub.ID, newExpiry)
+}
+
+// grantPlan creates per-game subscription records for every game in the plan (fan-out).
+func (uc *UseCase) grantPlan(ctx context.Context, pay Payment) error {
+	plan, err := uc.repo.GetSubscriptionPlan(ctx, pay.PlanID)
+	if err != nil {
+		return err
+	}
+	gameIDs, err := uc.repo.ListPlanGameIDs(ctx, pay.PlanID)
+	if err != nil {
+		return err
+	}
+	expiry := nextExpiry(nil)
+	for _, gameID := range gameIDs {
+		sub, err := uc.repo.CreateSubscription(ctx, idgen.New("sub"), pay.UserID, gameID, plan.DeveloperID, pay.Amount)
 		if err != nil {
 			return err
 		}
-		if remote.Status != "succeeded" {
-			return nil
-		}
+		_ = uc.repo.SetSubscriptionRenewalInfo(ctx, sub.ID, expiry, pay.PaymentMethodID)
+		_ = uc.games.RecordEvent(ctx, gameID, "acquire")
 	}
-
-	if err := uc.grant(ctx, pay); err != nil {
-		return err
-	}
-	metrics.PurchasesTotal.WithLabelValues(pay.Kind).Inc()
-	return uc.repo.UpdatePaymentStatus(ctx, pay.ID, "succeeded")
+	return nil
 }
 
 func (uc *UseCase) grant(ctx context.Context, pay Payment) error {
@@ -326,9 +437,12 @@ func (uc *UseCase) grant(ctx context.Context, pay Payment) error {
 		if err != nil {
 			return err
 		}
-		if err := uc.repo.CreateSubscription(ctx, idgen.New("sub"), pay.UserID, pay.GameID, g.DeveloperID, pay.Amount); err != nil {
+		sub, err := uc.repo.CreateSubscription(ctx, idgen.New("sub"), pay.UserID, pay.GameID, g.DeveloperID, pay.Amount)
+		if err != nil {
 			return err
 		}
+		expiry := nextExpiry(nil)
+		_ = uc.repo.SetSubscriptionRenewalInfo(ctx, sub.ID, expiry, pay.PaymentMethodID)
 	case "friend-pack":
 		friend, err := uc.repo.UserByUsername(ctx, pay.FriendUsername)
 		if err != nil {
@@ -344,6 +458,226 @@ func (uc *UseCase) grant(ctx context.Context, pay Payment) error {
 	}
 	_ = uc.games.RecordEvent(ctx, pay.GameID, "acquire")
 	return nil
+}
+
+// SubscriptionStatus returns subscription info for the current user (browser-game endpoint).
+func (uc *UseCase) SubscriptionStatus(ctx context.Context, userID, gameKey string) (VerifyResult, error) {
+	if gameKey == "" {
+		return VerifyResult{}, apperr.BadRequest("gameId is required")
+	}
+	return uc.repo.GetUserSubscriptionStatus(ctx, userID, gameKey)
+}
+
+// IssueLaunchToken generates a one-time token for a downloadable game to identify the player.
+// The token is valid for 15 minutes and is deleted on first use.
+func (uc *UseCase) IssueLaunchToken(ctx context.Context, user middleware.User, gameKey string) (string, error) {
+	if gameKey == "" {
+		return "", apperr.BadRequest("gameId is required")
+	}
+	gameID, err := uc.repo.GetGameIDByKey(ctx, gameKey)
+	if errors.Is(err, ErrNotFound) {
+		return "", apperr.NotFound("Game not found")
+	}
+	if err != nil {
+		return "", err
+	}
+	// verify the user actually owns or subscribes to this game
+	owned, _ := uc.repo.HasOwnership(ctx, user.ID, gameID)
+	subscribed, _ := uc.repo.HasActiveSubscription(ctx, user.ID, gameID)
+	if !owned && !subscribed {
+		return "", apperr.Forbidden("You don't own or subscribe to this game")
+	}
+	plaintext, hash := generateLaunchToken()
+	if err := uc.repo.CreateLaunchToken(ctx, hash, user.ID, gameID); err != nil {
+		return "", err
+	}
+	return plaintext, nil
+}
+
+func generateLaunchToken() (plaintext, hash string) {
+	raw := make([]byte, 24)
+	_, _ = rand.Read(raw)
+	plaintext = "lt_" + hex.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(plaintext))
+	hash = hex.EncodeToString(sum[:])
+	return
+}
+
+// RenewExpiring finds subscriptions expiring within 3 days and initiates recurrent payments.
+// This is called by the background renewal ticker in main.go.
+func (uc *UseCase) RenewExpiring(ctx context.Context) error {
+	cutoff := time.Now().Add(3 * 24 * time.Hour)
+	subs, err := uc.repo.ListExpiringSubscriptions(ctx, cutoff)
+	if err != nil {
+		return err
+	}
+	commission, err := uc.settings.Commission(ctx)
+	if err != nil {
+		return err
+	}
+	for _, sub := range subs {
+		if err := uc.renewOne(ctx, sub, commission); err != nil {
+			// Log and continue — one failure shouldn't block others.
+			fmt.Printf("renewal: sub %s: %v\n", sub.ID, err)
+		}
+	}
+	return nil
+}
+
+func (uc *UseCase) renewOne(ctx context.Context, sub Subscription, commission int) error {
+	if !uc.yk.Configured() {
+		return nil
+	}
+	commissionAmount := sub.Price * commission / 100
+	payID := idgen.New("pay")
+	pay, err := uc.repo.CreatePayment(ctx, Payment{
+		ID:                payID,
+		UserID:            sub.UserID,
+		GameID:            sub.GameID,
+		Kind:              "subscription",
+		Amount:            sub.Price,
+		CommissionPercent: commission,
+		CommissionAmount:  commissionAmount,
+		Status:            "pending",
+	})
+	if err != nil {
+		return err
+	}
+	if err := uc.repo.SetPaymentSubID(ctx, payID, sub.ID); err != nil {
+		return err
+	}
+	pay.SubID = sub.ID
+
+	ykp, err := uc.yk.CreateRecurrentPayment(ctx, yookassa.RecurrentParams{
+		Amount:          sub.Price,
+		Description:     "IndieForge: subscription renewal",
+		PaymentMethodID: sub.PaymentMethodID,
+		Metadata:        map[string]string{"paymentId": payID},
+	})
+	if err != nil {
+		_ = uc.repo.UpdatePaymentStatus(ctx, payID, "canceled")
+		return err
+	}
+	_ = uc.repo.SetPaymentYkID(ctx, payID, ykp.ID)
+	return nil
+}
+
+// CancelSubscription deactivates a subscription owned by the user.
+func (uc *UseCase) CancelSubscription(ctx context.Context, user middleware.User, subID string) error {
+	sub, err := uc.repo.GetSubscriptionByID(ctx, subID)
+	if errors.Is(err, ErrNotFound) {
+		return apperr.NotFound("Subscription not found")
+	}
+	if err != nil {
+		return err
+	}
+	if sub.UserID != user.ID {
+		return apperr.NotFound("Subscription not found")
+	}
+	return uc.repo.DeactivateSubscription(ctx, subID)
+}
+
+// nextExpiry calculates the next billing date (30 days from now, or from expiresAt if in the future).
+func nextExpiry(current *time.Time) time.Time {
+	base := time.Now()
+	if current != nil && current.After(base) {
+		base = *current
+	}
+	return base.Add(30 * 24 * time.Hour)
+}
+
+// createPlanPayment starts a YooKassa payment for a developer subscription plan.
+func (uc *UseCase) createPlanPayment(ctx context.Context, user middleware.User, planID string) (Payment, string, error) {
+	plan, err := uc.repo.GetSubscriptionPlan(ctx, planID)
+	if errors.Is(err, ErrNotFound) {
+		return Payment{}, "", apperr.NotFound("Subscription plan not found")
+	}
+	if err != nil {
+		return Payment{}, "", err
+	}
+	gameIDs, err := uc.repo.ListPlanGameIDs(ctx, planID)
+	if err != nil {
+		return Payment{}, "", err
+	}
+	if len(gameIDs) == 0 {
+		return Payment{}, "", apperr.BadRequest("This subscription plan has no games yet")
+	}
+	if !uc.yk.Configured() {
+		return Payment{}, "", apperr.New(503, "Payments are not configured")
+	}
+	commission, err := uc.settings.Commission(ctx)
+	if err != nil {
+		return Payment{}, "", err
+	}
+	commissionAmount := plan.Price * commission / 100
+	payID := idgen.New("pay")
+	pay, err := uc.repo.CreatePayment(ctx, Payment{
+		ID:                payID,
+		UserID:            user.ID,
+		GameID:            gameIDs[0], // representative game satisfying FK constraint
+		Kind:              "subscription",
+		Amount:            plan.Price,
+		CommissionPercent: commission,
+		CommissionAmount:  commissionAmount,
+		Status:            "pending",
+	})
+	if err != nil {
+		return Payment{}, "", err
+	}
+	if err := uc.repo.SetPaymentPlanID(ctx, payID, planID); err != nil {
+		return Payment{}, "", err
+	}
+	pay.PlanID = planID
+	ykp, err := uc.yk.CreatePayment(ctx, yookassa.CreateParams{
+		Amount:            plan.Price,
+		Description:       "IndieForge: subscription plan",
+		ReturnURL:         uc.appBaseURL + "/checkout/return?paymentId=" + payID,
+		Metadata:          map[string]string{"paymentId": payID},
+		SavePaymentMethod: true,
+	})
+	if err != nil {
+		_ = uc.repo.UpdatePaymentStatus(ctx, payID, "canceled")
+		return Payment{}, "", apperr.New(502, "Payment provider error")
+	}
+	if err := uc.repo.SetPaymentYkID(ctx, payID, ykp.ID); err != nil {
+		return Payment{}, "", err
+	}
+	pay.YkID = ykp.ID
+	return pay, ykp.ConfirmationURL, nil
+}
+
+const refundWindow = 10 * time.Minute
+
+// Refund issues a full refund for a succeeded purchase within the allowed window.
+func (uc *UseCase) Refund(ctx context.Context, user middleware.User, id string) error {
+	pay, err := uc.repo.GetPaymentByID(ctx, id)
+	if errors.Is(err, ErrNotFound) || (err == nil && pay.UserID != user.ID) {
+		return apperr.NotFound("Payment not found")
+	}
+	if err != nil {
+		return err
+	}
+	if pay.Status == "refunded" {
+		return apperr.BadRequest("This payment has already been refunded")
+	}
+	if pay.Status != "succeeded" {
+		return apperr.BadRequest("Only succeeded payments can be refunded")
+	}
+	if pay.Kind != "purchase" {
+		return apperr.BadRequest("Only purchase payments can be refunded")
+	}
+	if time.Since(pay.CreatedAt) > refundWindow {
+		return apperr.BadRequest("Refund window has expired (10 minutes after purchase)")
+	}
+	if uc.yk.Configured() && pay.YkID != "" {
+		if err := uc.yk.RefundPayment(ctx, pay.YkID, pay.Amount); err != nil {
+			return apperr.New(502, "Payment provider refund error")
+		}
+	}
+	if err := uc.repo.DeleteOwnership(ctx, user.ID, pay.GameID); err != nil {
+		return err
+	}
+	return uc.repo.UpdatePaymentStatus(ctx, pay.ID, "refunded")
 }
 
 // Perks returns the subscriber chat link if the caller is an active subscriber or the author.

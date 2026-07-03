@@ -14,6 +14,7 @@ import { AuthPage } from './pages/AuthPage';
 import { ModerationPage } from './pages/ModerationPage';
 import { AdminPage } from './pages/AdminPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { DocsPage } from './pages/DocsPage';
 
 export function App() {
   return (
@@ -80,6 +81,7 @@ export function App() {
             </RoleRoute>
           }
         />
+        <Route path="/docs" element={<DocsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

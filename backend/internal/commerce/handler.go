@@ -14,13 +14,17 @@ import (
 
 // Service is the behaviour the handler needs from the commerce usecase.
 type Service interface {
-	Library(ctx context.Context, userID string) ([]dto.GameDTO, []dto.GameDTO, error)
+	Library(ctx context.Context, userID string) ([]dto.GameDTO, []dto.UserSubscriptionDTO, error)
 	ClaimFree(ctx context.Context, user middleware.User, gameKey string) (dto.GameDTO, error)
-	CreatePayment(ctx context.Context, user middleware.User, gameKey, kind, friendUsername string) (Payment, string, error)
+	CreatePayment(ctx context.Context, user middleware.User, gameKey, kind, friendUsername, planID string) (Payment, string, error)
 	GetPayment(ctx context.Context, user middleware.User, id string) (Payment, dto.GameDTO, error)
 	CancelPayment(ctx context.Context, user middleware.User, id string) error
+	Refund(ctx context.Context, user middleware.User, id string) error
 	HandleWebhook(ctx context.Context, body []byte) error
 	Perks(ctx context.Context, user middleware.User, gameKey string) (string, error)
+	CancelSubscription(ctx context.Context, user middleware.User, subID string) error
+	SubscriptionStatus(ctx context.Context, userID, gameKey string) (VerifyResult, error)
+	IssueLaunchToken(ctx context.Context, user middleware.User, gameKey string) (string, error)
 }
 
 // Handler exposes the commerce routes over HTTP.
@@ -41,7 +45,11 @@ func (h *Handler) Register(g *echo.Group) {
 	g.POST("/payments", h.createPayment, h.mw.Require())
 	g.GET("/payments/:id", h.getPayment, h.mw.Require())
 	g.POST("/payments/:id/cancel", h.cancelPayment, h.mw.Require())
+	g.POST("/payments/:id/refund", h.refundPayment, h.mw.Require())
 	g.GET("/games/:id/perks", h.perks, h.mw.Require())
+	g.DELETE("/subscriptions/:id", h.cancelSubscription, h.mw.Require())
+	g.GET("/me/subscription-status", h.subscriptionStatus, h.mw.Require())
+	g.POST("/me/launch-tokens", h.issueLaunchToken, h.mw.Require())
 	g.POST("/webhooks/yookassa", h.webhook)
 }
 
@@ -93,7 +101,7 @@ func (h *Handler) createPayment(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return apperr.BadRequest("Invalid request body")
 	}
-	pay, confirmationURL, err := h.uc.CreatePayment(c.Request().Context(), *user, req.GameID, req.Kind, req.FriendUsername)
+	pay, confirmationURL, err := h.uc.CreatePayment(c.Request().Context(), *user, req.GameID, req.Kind, req.FriendUsername, req.PlanID)
 	if err != nil {
 		return err
 	}
@@ -132,6 +140,21 @@ func (h *Handler) cancelPayment(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// refundPayment godoc
+// @Summary  Refund a purchase (within 10 minutes)
+// @Tags     commerce
+// @Security BearerAuth
+// @Param    id path string true "Payment id"
+// @Success  204
+// @Router   /payments/{id}/refund [post]
+func (h *Handler) refundPayment(c echo.Context) error {
+	user := middleware.UserFrom(c)
+	if err := h.uc.Refund(c.Request().Context(), *user, c.Param("id")); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // perks godoc
 // @Summary  Subscriber chat link (subscribers/author only)
 // @Tags     commerce
@@ -164,4 +187,64 @@ func (h *Handler) webhook(c echo.Context) error {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
+}
+
+// cancelSubscription godoc
+// @Summary  Cancel an active subscription
+// @Tags     commerce
+// @Security BearerAuth
+// @Param    id path string true "subscription ID"
+// @Success  204
+// @Router   /subscriptions/{id} [delete]
+func (h *Handler) cancelSubscription(c echo.Context) error {
+	user := middleware.UserFrom(c)
+	if err := h.uc.CancelSubscription(c.Request().Context(), *user, c.Param("id")); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// subscriptionStatus godoc
+// @Summary  Check subscription status for the current user (browser-game endpoint)
+// @Tags     commerce
+// @Security BearerAuth
+// @Param    gameId query string true "Game ID or slug"
+// @Produce  json
+// @Success  200 {object} map[string]interface{}
+// @Router   /me/subscription-status [get]
+func (h *Handler) subscriptionStatus(c echo.Context) error {
+	user := middleware.UserFrom(c)
+	result, err := h.uc.SubscriptionStatus(c.Request().Context(), user.ID, c.QueryParam("gameId"))
+	if err != nil {
+		return err
+	}
+	resp := map[string]any{"subscribed": result.Subscribed, "expiresAt": nil}
+	if result.ExpiresAt != nil {
+		resp["expiresAt"] = result.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// issueLaunchToken godoc
+// @Summary  Generate a one-time launch token for a downloadable game
+// @Tags     commerce
+// @Security BearerAuth
+// @Accept   json
+// @Produce  json
+// @Param    body body map[string]string true "{\"gameId\": \"my-game\"}"
+// @Success  201 {object} map[string]string
+// @Router   /me/launch-tokens [post]
+func (h *Handler) issueLaunchToken(c echo.Context) error {
+	user := middleware.UserFrom(c)
+	var req struct {
+		GameID string `json:"gameId"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperr.BadRequest("Invalid request body")
+	}
+	token, err := h.uc.IssueLaunchToken(c.Request().Context(), *user, req.GameID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, map[string]string{"token": token})
 }

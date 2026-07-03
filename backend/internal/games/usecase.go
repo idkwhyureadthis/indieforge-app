@@ -42,6 +42,7 @@ type Repo interface {
 	HasSubscription(ctx context.Context, userID, gameID string) (bool, error)
 	OwnedGameIDs(ctx context.Context, userID string) (map[string]bool, error)
 	SubscribedGameIDs(ctx context.Context, userID string) (map[string]bool, error)
+	MarkDeveloper(ctx context.Context, userID string) error
 }
 
 // Storage is the object-storage port (S3/MinIO).
@@ -95,10 +96,11 @@ type NewGame struct {
 	Subscription        Subscription
 	DemoDay             DemoDay
 	Theme               dto.Theme
-	Cover               *Upload
-	Screenshots         []*Upload
-	BrowserBuildZip     *Upload
-	DownloadFile        *Upload
+	Cover           *Upload
+	Background      *Upload
+	Screenshots     []*Upload
+	BrowserBuildZip *Upload
+	DownloadFile    *Upload
 }
 
 // Filters narrows GET /games to a search, genre, tag, pricing model, and sort order.
@@ -172,6 +174,11 @@ func (uc *UseCase) List(ctx context.Context, f Filters, viewerID string) ([]dto.
 }
 
 // MyGames returns every game (any status) created by developerID.
+// ListByDeveloper returns raw Game domain objects (used by the subscriptions module).
+func (uc *UseCase) ListByDeveloper(ctx context.Context, developerID string) ([]Game, error) {
+	return uc.repo.ListByDeveloper(ctx, developerID)
+}
+
 func (uc *UseCase) MyGames(ctx context.Context, developerID string) ([]dto.GameDTO, error) {
 	list, err := uc.repo.ListByDeveloper(ctx, developerID)
 	if err != nil {
@@ -271,7 +278,7 @@ func (uc *UseCase) Create(ctx context.Context, dev middleware.User, in NewGame) 
 	}
 
 	// Antivirus: scan every uploaded file before anything is stored.
-	uploads := []*Upload{in.Cover, in.BrowserBuildZip, in.DownloadFile}
+	uploads := []*Upload{in.Cover, in.Background, in.BrowserBuildZip, in.DownloadFile}
 	uploads = append(uploads, in.Screenshots...)
 	for _, u := range uploads {
 		if u == nil {
@@ -298,6 +305,13 @@ func (uc *UseCase) Create(ctx context.Context, dev middleware.User, in NewGame) 
 		if err != nil {
 			return dto.GameDTO{}, apperr.Internal("Could not store cover image")
 		}
+	}
+	if in.Background != nil {
+		bgURL, berr := uc.store.PutPublic(ctx, "media/"+id+"/bg"+ext(in.Background.Filename), in.Background.ContentType, in.Background.Data)
+		if berr != nil {
+			return dto.GameDTO{}, apperr.Internal("Could not store background image")
+		}
+		in.Theme.BackgroundImage = bgURL
 	}
 	shots := make([]string, 0, len(in.Screenshots))
 	for i, s := range in.Screenshots {
@@ -385,6 +399,10 @@ func (uc *UseCase) Create(ctx context.Context, dev middleware.User, in NewGame) 
 	})
 	if err != nil {
 		return dto.GameDTO{}, err
+	}
+	// First publish makes the user a developer so they can request payouts.
+	if !dev.IsDeveloper {
+		_ = uc.repo.MarkDeveloper(ctx, dev.ID)
 	}
 	return uc.Serialize(ctx, g, dev.ID)
 }

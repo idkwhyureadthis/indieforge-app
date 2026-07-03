@@ -210,6 +210,9 @@ func (h *Handler) create(c echo.Context) error {
 	if in.Cover, err = firstFile(form, "cover"); err != nil {
 		return err
 	}
+	if in.Background, err = firstFile(form, "backgroundImage"); err != nil {
+		return err
+	}
 	if in.BrowserBuildZip, err = firstFile(form, "browserBuild"); err != nil {
 		return err
 	}

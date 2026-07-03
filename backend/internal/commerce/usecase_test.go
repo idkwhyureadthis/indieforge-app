@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"indieforge/internal/dto"
 	"indieforge/internal/games"
@@ -44,14 +45,35 @@ func (r *fakeRepo) HasOwnership(_ context.Context, userID, gameID string) (bool,
 	return r.owns[key(userID, gameID)], nil
 }
 func (r *fakeRepo) OwnedGameIDs(_ context.Context, _ string) ([]string, error) { return nil, nil }
-func (r *fakeRepo) CreateSubscription(_ context.Context, _, userID, gameID, _ string, _ int) error {
+func (r *fakeRepo) CreateSubscription(_ context.Context, id, userID, gameID, _ string, _ int) (Subscription, error) {
 	r.subs[key(userID, gameID)] = true
+	return Subscription{ID: id, UserID: userID, GameID: gameID}, nil
+}
+func (r *fakeRepo) GetSubscriptionByID(_ context.Context, _ string) (Subscription, error) {
+	return Subscription{}, ErrNotFound
+}
+func (r *fakeRepo) SetSubscriptionRenewalInfo(_ context.Context, _ string, _ time.Time, _ string) error {
 	return nil
 }
+func (r *fakeRepo) ExtendSubscription(_ context.Context, _ string, _ time.Time) error { return nil }
+func (r *fakeRepo) DeactivateSubscription(_ context.Context, _ string) error           { return nil }
+func (r *fakeRepo) ListExpiringSubscriptions(_ context.Context, _ time.Time) ([]Subscription, error) {
+	return nil, nil
+}
+func (r *fakeRepo) SetPaymentSubID(_ context.Context, _, _ string) error    { return nil }
+func (r *fakeRepo) SetPaymentMethodID(_ context.Context, _, _ string) error { return nil }
 func (r *fakeRepo) HasActiveSubscription(_ context.Context, userID, gameID string) (bool, error) {
 	return r.subs[key(userID, gameID)], nil
 }
 func (r *fakeRepo) SubscribedGameIDs(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (r *fakeRepo) ListSubscriptions(_ context.Context, _ string) ([]Subscription, error) {
+	return nil, nil
+}
+func (r *fakeRepo) GetUserSubscriptionStatus(_ context.Context, _, _ string) (VerifyResult, error) {
+	return VerifyResult{}, nil
+}
+func (r *fakeRepo) GetGameIDByKey(_ context.Context, key string) (string, error) { return key, nil }
+func (r *fakeRepo) CreateLaunchToken(_ context.Context, _, _, _ string) error    { return nil }
 func (r *fakeRepo) CreatePayment(_ context.Context, p Payment) (Payment, error) {
 	r.payments[p.ID] = p
 	return p, nil
@@ -93,6 +115,15 @@ func (r *fakeRepo) UserByUsername(_ context.Context, username string) (middlewar
 func (r *fakeRepo) UsernameByID(_ context.Context, id string) (string, error) {
 	return r.usersByID[id], nil
 }
+func (r *fakeRepo) DeleteOwnership(_ context.Context, userID, gameID string) error {
+	delete(r.owns, key(userID, gameID))
+	return nil
+}
+func (r *fakeRepo) GetSubscriptionPlan(_ context.Context, _ string) (SubscriptionPlan, error) {
+	return SubscriptionPlan{}, ErrNotFound
+}
+func (r *fakeRepo) ListPlanGameIDs(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (r *fakeRepo) SetPaymentPlanID(_ context.Context, _, _ string) error          { return nil }
 
 type fakeGames struct{ games map[string]games.Game }
 
@@ -117,6 +148,10 @@ func (y *fakeYK) CreatePayment(_ context.Context, _ yookassa.CreateParams) (yook
 func (y *fakeYK) GetPayment(_ context.Context, id string) (yookassa.Payment, error) {
 	return yookassa.Payment{ID: id, Status: y.status}, nil
 }
+func (y *fakeYK) CreateRecurrentPayment(_ context.Context, _ yookassa.RecurrentParams) (yookassa.Payment, error) {
+	return yookassa.Payment{ID: "yk_renew", Status: "pending"}, nil
+}
+func (y *fakeYK) RefundPayment(_ context.Context, _ string, _ int) error { return nil }
 
 type fakeSettings struct{ commission int }
 
@@ -252,7 +287,7 @@ func TestCreatePayment_FriendPack(t *testing.T) {
 				}
 			}
 
-			pay, url, err := uc.CreatePayment(context.Background(), buyer, "g1", "friend-pack", tt.friendUsername)
+			pay, url, err := uc.CreatePayment(context.Background(), buyer, "g1", "friend-pack", tt.friendUsername, "")
 
 			if tt.wantErrStatus != 0 {
 				if got := statusOf(t, err); got != tt.wantErrStatus {
@@ -288,7 +323,7 @@ func TestWebhook_GrantsAndIsIdempotent(t *testing.T) {
 	fg.games["g1"] = games.Game{ID: "g1", PricingModel: "paid", Price: 499}
 	buyer := middleware.User{ID: "u1", Username: "buyer"}
 
-	pay, _, err := uc.CreatePayment(context.Background(), buyer, "g1", "purchase", "")
+	pay, _, err := uc.CreatePayment(context.Background(), buyer, "g1", "purchase", "", "")
 	if err != nil {
 		t.Fatalf("create payment: %v", err)
 	}

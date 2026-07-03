@@ -10,6 +10,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type DeveloperApiKey struct {
+	ID          string             `json:"id"`
+	DeveloperID string             `json:"developer_id"`
+	Name        string             `json:"name"`
+	KeyHash     string             `json:"key_hash"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt  *time.Time         `json:"last_used_at"`
+	Revoked     bool               `json:"revoked"`
+}
+
 type Game struct {
 	ID                  string             `json:"id"`
 	Slug                string             `json:"slug"`
@@ -54,6 +64,13 @@ type GameEvent struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type LaunchToken struct {
+	TokenHash string             `json:"token_hash"`
+	UserID    string             `json:"user_id"`
+	GameID    string             `json:"game_id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
 type Ownership struct {
 	ID        string             `json:"id"`
 	UserID    string             `json:"user_id"`
@@ -76,6 +93,19 @@ type Payment struct {
 	Status            string             `json:"status"`
 	FriendUsername    string             `json:"friend_username"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	PlanID            *string            `json:"plan_id"`
+	SubID             *string            `json:"sub_id"`
+	PaymentMethodID   string             `json:"payment_method_id"`
+}
+
+type Payout struct {
+	ID          string             `json:"id"`
+	DeveloperID string             `json:"developer_id"`
+	Amount      int32              `json:"amount"`
+	Status      string             `json:"status"`
+	Note        string             `json:"note"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Report struct {
@@ -107,13 +137,32 @@ type Setting struct {
 }
 
 type Subscription struct {
+	ID              string             `json:"id"`
+	UserID          string             `json:"user_id"`
+	GameID          string             `json:"game_id"`
+	DeveloperID     string             `json:"developer_id"`
+	Price           int32              `json:"price"`
+	Active          bool               `json:"active"`
+	StartedAt       pgtype.Timestamptz `json:"started_at"`
+	ExpiresAt       *time.Time         `json:"expires_at"`
+	PaymentMethodID string             `json:"payment_method_id"`
+}
+
+type SubscriptionPlan struct {
 	ID          string             `json:"id"`
-	UserID      string             `json:"user_id"`
-	GameID      string             `json:"game_id"`
 	DeveloperID string             `json:"developer_id"`
+	Name        string             `json:"name"`
 	Price       int32              `json:"price"`
+	Period      string             `json:"period"`
+	Benefits    []string           `json:"benefits"`
+	ChatLink    string             `json:"chat_link"`
 	Active      bool               `json:"active"`
-	StartedAt   pgtype.Timestamptz `json:"started_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type SubscriptionPlanGame struct {
+	PlanID string `json:"plan_id"`
+	GameID string `json:"game_id"`
 }
 
 type User struct {

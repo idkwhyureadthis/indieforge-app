@@ -18,4 +18,13 @@ type CreatePaymentRequest struct {
 	GameID         string `json:"gameId"`
 	Kind           string `json:"kind"`
 	FriendUsername string `json:"friendUsername"`
+	PlanID         string `json:"planId"` // non-empty when subscribing to a developer plan
+}
+
+// UserSubscriptionDTO carries subscription metadata alongside the game in library responses.
+type UserSubscriptionDTO struct {
+	ID        string  `json:"id"`
+	Game      GameDTO `json:"game"`
+	ExpiresAt *string `json:"expiresAt"` // ISO 8601, nil for legacy subscriptions
+	Active    bool    `json:"active"`
 }
