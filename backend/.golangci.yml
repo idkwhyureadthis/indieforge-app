@@ -23,6 +23,12 @@ linters:
     - unparam
     - wastedassign
 
+  settings:
+    revive:
+      rules:
+        - name: unexported-return
+          disabled: true
+
   exclusions:
     rules:
       # Generated code is never hand-edited; don't lint it.

@@ -57,7 +57,7 @@ func (uc *UseCase) AuthenticateKey(ctx context.Context, plaintext string) (APIKe
 	if err != nil {
 		return APIKey{}, apperr.Unauthorized("Invalid or revoked API key")
 	}
-	go func() { _ = uc.repo.TouchKey(context.Background(), key.ID) }()
+	go func() { _ = uc.repo.TouchKey(ctx, key.ID) }()
 	return key, nil
 }
 
@@ -73,7 +73,7 @@ func (uc *UseCase) VerifySubscription(ctx context.Context, key APIKey, userID, g
 // VerifyLaunchToken redeems a one-time launch token (requires API key auth).
 // The token is deleted on first use to prevent replay attacks.
 // Returns user identity + subscription status in one call.
-func (uc *UseCase) VerifyLaunchToken(ctx context.Context, key APIKey, tokenPlaintext string) (LaunchTokenResult, error) {
+func (uc *UseCase) VerifyLaunchToken(ctx context.Context, _ APIKey, tokenPlaintext string) (LaunchTokenResult, error) {
 	if tokenPlaintext == "" {
 		return LaunchTokenResult{}, apperr.BadRequest("token is required")
 	}

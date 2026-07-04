@@ -1,7 +1,7 @@
 package metrics
 
 import (
-	"net/http"
+	"errors"
 	"strconv"
 	"time"
 
@@ -27,10 +27,9 @@ func Middleware() echo.MiddlewareFunc {
 
 			status := c.Response().Status
 			if err != nil {
-				if he, ok := err.(*echo.HTTPError); ok {
+				var he *echo.HTTPError
+				if errors.As(err, &he) {
 					status = he.Code
-				} else {
-					status = http.StatusInternalServerError
 				}
 			}
 

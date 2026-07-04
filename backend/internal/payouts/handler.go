@@ -10,10 +10,11 @@ import (
 )
 
 type handler struct {
-	uc   *UseCase
+	uc    *UseCase
 	authn *middleware.Authenticator
 }
 
+// NewHandler ...
 func NewHandler(uc *UseCase, authn *middleware.Authenticator) *handler {
 	return &handler{uc: uc, authn: authn}
 }

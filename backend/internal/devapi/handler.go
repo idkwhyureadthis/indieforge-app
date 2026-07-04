@@ -55,12 +55,12 @@ func rateLimiter() echo.MiddlewareFunc {
 				ExpiresIn: 5 * time.Minute,
 			},
 		),
-		ErrorHandler: func(c echo.Context, err error) error {
+		ErrorHandler: func(c echo.Context, _ error) error {
 			return c.JSON(http.StatusTooManyRequests, map[string]string{
 				"error": "Rate limit exceeded — max 60 requests per minute per API key",
 			})
 		},
-		DenyHandler: func(c echo.Context, identifier string, err error) error {
+		DenyHandler: func(c echo.Context, _ string, _ error) error {
 			return c.JSON(http.StatusTooManyRequests, map[string]string{
 				"error": "Rate limit exceeded — max 60 requests per minute per API key",
 			})

@@ -6,11 +6,14 @@ import (
 )
 
 var (
+
+	// HTTPRequests ...
 	HTTPRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "indieforge_http_requests_total",
 		Help: "Total HTTP requests by method, route pattern, and status code.",
 	}, []string{"method", "path", "status"})
 
+	// HTTPDuration ...
 	HTTPDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "indieforge_http_request_duration_seconds",
 		Help:    "HTTP request duration in seconds (P50/P95/P99 via histogram_quantile).",
@@ -36,6 +39,7 @@ var (
 		Help: "Monthly active users: distinct users with a session in the last 30 days.",
 	})
 
+	// ActiveSubscriptions ...
 	ActiveSubscriptions = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "indieforge_active_subscriptions_total",
 		Help: "Total currently active subscriptions.",

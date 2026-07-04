@@ -74,11 +74,14 @@ func (uc *UseCase) UpsertPlan(ctx context.Context, user middleware.User, name st
 	}
 	existing, err := uc.repo.GetByDeveloper(ctx, user.ID)
 	var planID string
-	if errors.Is(err, ErrNotFound) {
+	switch {
+	case errors.Is(err, ErrNotFound):
 		planID = idgen.New("plan")
-	} else if err != nil {
+
+	case err != nil:
 		return PlanWithGames{}, err
-	} else {
+
+	default:
 		planID = existing.ID
 	}
 	plan, err := uc.repo.Upsert(ctx, planID, user.ID, name, price, period, benefits, chatLink)

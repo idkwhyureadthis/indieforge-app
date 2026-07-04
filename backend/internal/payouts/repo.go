@@ -11,8 +11,10 @@ import (
 	"indieforge/pkg/intconv"
 )
 
+// ErrNotFound ...
 var ErrNotFound = errors.New("not found")
 
+// Payout ...
 type Payout struct {
 	ID          string
 	DeveloperID string
@@ -23,6 +25,7 @@ type Payout struct {
 	UpdatedAt   time.Time
 }
 
+// PayoutWithDev ...
 type PayoutWithDev struct {
 	Payout
 	DeveloperUsername string
@@ -30,6 +33,7 @@ type PayoutWithDev struct {
 
 type repo struct{ q *sqlc.Queries }
 
+// NewRepo ...
 func NewRepo(q *sqlc.Queries) Repo { return &repo{q: q} }
 
 func mapPayout(p sqlc.Payout) Payout {

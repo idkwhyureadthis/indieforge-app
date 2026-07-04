@@ -15,8 +15,8 @@ import (
 )
 
 var (
+	// ErrNotFound ...
 	ErrNotFound = errors.New("not found")
-	ErrExpired  = errors.New("token expired")
 )
 
 // LaunchTokenResult is the result of verifying a launch token.

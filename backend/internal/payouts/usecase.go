@@ -22,6 +22,7 @@ type Repo interface {
 // UseCase contains the payout business logic.
 type UseCase struct{ repo Repo }
 
+// NewUseCase ...
 func NewUseCase(r Repo) *UseCase { return &UseCase{repo: r} }
 
 // Balance returns earned, available (earned - requested), and full payout history.

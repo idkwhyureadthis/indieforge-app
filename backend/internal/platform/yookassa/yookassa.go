@@ -90,9 +90,9 @@ type ykRecurrentReq struct {
 }
 
 type ykPaymentResp struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
-	Paid   bool   `json:"paid"`
+	ID           string `json:"id"`
+	Status       string `json:"status"`
+	Paid         bool   `json:"paid"`
 	Confirmation struct {
 		ConfirmationURL string `json:"confirmation_url"`
 	} `json:"confirmation"`

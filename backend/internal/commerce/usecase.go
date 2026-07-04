@@ -371,16 +371,19 @@ func (uc *UseCase) HandleWebhook(ctx context.Context, body []byte) error {
 			pay.PaymentMethodID = pmID
 		}
 
-		if pay.SubID != "" {
+		switch {
+		case pay.SubID != "":
 			// This is a renewal payment — extend the subscription.
 			if err := uc.extendSub(ctx, pay); err != nil {
 				return err
 			}
-		} else if pay.PlanID != "" {
+
+		case pay.PlanID != "":
 			if err := uc.grantPlan(ctx, pay); err != nil {
 				return err
 			}
-		} else {
+
+		default:
 			if err := uc.grant(ctx, pay); err != nil {
 				return err
 			}

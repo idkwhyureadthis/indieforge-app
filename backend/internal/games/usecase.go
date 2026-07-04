@@ -96,11 +96,11 @@ type NewGame struct {
 	Subscription        Subscription
 	DemoDay             DemoDay
 	Theme               dto.Theme
-	Cover           *Upload
-	Background      *Upload
-	Screenshots     []*Upload
-	BrowserBuildZip *Upload
-	DownloadFile    *Upload
+	Cover               *Upload
+	Background          *Upload
+	Screenshots         []*Upload
+	BrowserBuildZip     *Upload
+	DownloadFile        *Upload
 }
 
 // Filters narrows GET /games to a search, genre, tag, pricing model, and sort order.
@@ -173,12 +173,12 @@ func (uc *UseCase) List(ctx context.Context, f Filters, viewerID string) ([]dto.
 	return uc.serializeMany(ctx, all, viewerID, f.Sort)
 }
 
-// MyGames returns every game (any status) created by developerID.
 // ListByDeveloper returns raw Game domain objects (used by the subscriptions module).
 func (uc *UseCase) ListByDeveloper(ctx context.Context, developerID string) ([]Game, error) {
 	return uc.repo.ListByDeveloper(ctx, developerID)
 }
 
+// MyGames returns every game (any status) created by developerID.
 func (uc *UseCase) MyGames(ctx context.Context, developerID string) ([]dto.GameDTO, error) {
 	list, err := uc.repo.ListByDeveloper(ctx, developerID)
 	if err != nil {

@@ -109,9 +109,7 @@ func (r *repo) ListPlanGameIDs(ctx context.Context, planID string) ([]string, er
 		return nil, err
 	}
 	out := make([]string, len(rows))
-	for i, id := range rows {
-		out[i] = id
-	}
+	copy(out, rows)
 	return out, nil
 }
 

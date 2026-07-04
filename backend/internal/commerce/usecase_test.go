@@ -56,7 +56,7 @@ func (r *fakeRepo) SetSubscriptionRenewalInfo(_ context.Context, _ string, _ tim
 	return nil
 }
 func (r *fakeRepo) ExtendSubscription(_ context.Context, _ string, _ time.Time) error { return nil }
-func (r *fakeRepo) DeactivateSubscription(_ context.Context, _ string) error           { return nil }
+func (r *fakeRepo) DeactivateSubscription(_ context.Context, _ string) error          { return nil }
 func (r *fakeRepo) ListExpiringSubscriptions(_ context.Context, _ time.Time) ([]Subscription, error) {
 	return nil, nil
 }
@@ -123,7 +123,7 @@ func (r *fakeRepo) GetSubscriptionPlan(_ context.Context, _ string) (Subscriptio
 	return SubscriptionPlan{}, ErrNotFound
 }
 func (r *fakeRepo) ListPlanGameIDs(_ context.Context, _ string) ([]string, error) { return nil, nil }
-func (r *fakeRepo) SetPaymentPlanID(_ context.Context, _, _ string) error          { return nil }
+func (r *fakeRepo) SetPaymentPlanID(_ context.Context, _, _ string) error         { return nil }
 
 type fakeGames struct{ games map[string]games.Game }
 
