@@ -15,6 +15,9 @@ definitions:
         type: string
       kind:
         type: string
+      planId:
+        description: non-empty when subscribing to a developer plan
+        type: string
     type: object
   indieforge_internal_dto.CreateReportRequest:
     properties:
@@ -234,6 +237,8 @@ definitions:
         type: string
       background:
         type: string
+      backgroundImage:
+        type: string
       cardShape:
         type: string
       layout:
@@ -254,12 +259,109 @@ definitions:
       username:
         type: string
     type: object
+  internal_payouts.Payout:
+    properties:
+      amount:
+        type: integer
+      createdAt:
+        type: string
+      developerID:
+        type: string
+      id:
+        type: string
+      note:
+        type: string
+      status:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  internal_payouts.PayoutWithDev:
+    properties:
+      amount:
+        type: integer
+      createdAt:
+        type: string
+      developerID:
+        type: string
+      developerUsername:
+        type: string
+      id:
+        type: string
+      note:
+        type: string
+      status:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  internal_payouts.balanceResp:
+    properties:
+      available:
+        type: integer
+      earned:
+        type: integer
+      history:
+        items:
+          $ref: '#/definitions/internal_payouts.Payout'
+        type: array
+    type: object
+  internal_payouts.requestPayoutReq:
+    properties:
+      amount:
+        type: integer
+    type: object
+  internal_payouts.updateStatusReq:
+    properties:
+      note:
+        type: string
+      status:
+        type: string
+    type: object
 info:
   contact: {}
   description: Catalog of indie games — browser or download, free, paid or subscription.
   title: IndieForge API
   version: "1.0"
 paths:
+  /admin/payouts:
+    get:
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_payouts.PayoutWithDev'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List all payouts (admin)
+      tags:
+      - payouts
+  /admin/payouts/{id}:
+    patch:
+      parameters:
+      - description: payout ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: status + optional note
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_payouts.updateStatusReq'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_payouts.Payout'
+      security:
+      - BearerAuth: []
+      summary: Update payout status (admin)
+      tags:
+      - payouts
   /admin/settings:
     get:
       produces:
@@ -368,6 +470,62 @@ paths:
       summary: Register a new account
       tags:
       - auth
+  /developer/api-keys:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List developer API keys
+      tags:
+      - developer-api
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: name
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a developer API key
+      tags:
+      - developer-api
+  /developer/api-keys/{id}:
+    delete:
+      parameters:
+      - description: Key ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Revoke a developer API key
+      tags:
+      - developer-api
   /games:
     get:
       parameters:
@@ -570,6 +728,33 @@ paths:
       summary: Games created by the current user
       tags:
       - games
+  /me/launch-tokens:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: '{\'
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Generate a one-time launch token for a downloadable game
+      tags:
+      - commerce
   /me/library:
     get:
       produces:
@@ -583,6 +768,27 @@ paths:
       security:
       - BearerAuth: []
       summary: Owned + subscribed games
+      tags:
+      - commerce
+  /me/subscription-status:
+    get:
+      parameters:
+      - description: Game ID or slug
+        in: query
+        name: gameId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Check subscription status for the current user (browser-game endpoint)
       tags:
       - commerce
   /moderation/reports:
@@ -717,6 +923,53 @@ paths:
       summary: Cancel a pending payment
       tags:
       - commerce
+  /payments/{id}/refund:
+    post:
+      parameters:
+      - description: Payment id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Refund a purchase (within 10 minutes)
+      tags:
+      - commerce
+  /payouts:
+    post:
+      parameters:
+      - description: amount in kopecks
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_payouts.requestPayoutReq'
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_payouts.Payout'
+      security:
+      - BearerAuth: []
+      summary: Request a payout
+      tags:
+      - payouts
+  /payouts/balance:
+    get:
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_payouts.balanceResp'
+      security:
+      - BearerAuth: []
+      summary: Get developer payout balance
+      tags:
+      - payouts
   /reports:
     post:
       consumes:
@@ -742,6 +995,80 @@ paths:
       summary: Report a game
       tags:
       - moderation
+  /subscriptions/{id}:
+    delete:
+      parameters:
+      - description: subscription ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Cancel an active subscription
+      tags:
+      - commerce
+  /v1/launch-tokens/verify:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Developer API key
+        in: header
+        name: X-API-Key
+        required: true
+        type: string
+      - description: '{\'
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Verify a one-time launch token (Developer API)
+      tags:
+      - developer-api
+  /v1/subscriptions/verify:
+    get:
+      parameters:
+      - description: Developer API key (sk_...)
+        in: header
+        name: X-API-Key
+        required: true
+        type: string
+      - description: IndieForge user ID of the player
+        in: query
+        name: userId
+        required: true
+        type: string
+      - description: Game ID or slug
+        in: query
+        name: gameId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Verify a player subscription (Developer API)
+      tags:
+      - developer-api
   /webhooks/yookassa:
     post:
       consumes:
